@@ -1,0 +1,56 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Synk API", "version": "0.1.0", "description": "API de Synk (salas de estudio)" },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Estado del servicio (no consulta Firestore)",
+        "responses": {
+          "200": {
+            "description": "Servicio activo",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string", "example": "ok" } } } } }
+          }
+        }
+      }
+    },
+    "/api/base": {
+      "get": {
+        "summary": "Dato de la base técnica leído de Firestore (base/info)",
+        "responses": {
+          "200": {
+            "description": "Dato encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mensaje": { "type": "string", "example": "Hola desde Firestore 👋" },
+                    "actualizado": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Aún no hay datos", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Firestore no disponible", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "example": "DB_UNAVAILABLE" },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
