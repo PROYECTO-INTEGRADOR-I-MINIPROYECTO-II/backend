@@ -1,0 +1,16 @@
+services:
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: .env
+        required: false
+
+  # Descomentar cuando exista el frontend
+  # web:
+  #   build: ../frontend
+  #   ports:
+  #     - "5173:80"
+  #   depends_on:
+  #     - api
