@@ -1,0 +1,19 @@
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+
+// Perezoso: el server arranca sin credenciales; el error aparece al primer uso.
+export function getDb() {
+  if (!getApps().length) {
+    const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+    if (!raw) throw new Error('Falta la variable FIREBASE_SERVICE_ACCOUNT');
+    let account;
+    try {
+      account = JSON.parse(Buffer.from(raw, 'base64').toString());
+    } catch {
+      // No relanzar el SyntaxError: su mensaje incluye un fragmento de la credencial.
+      throw new Error('FIREBASE_SERVICE_ACCOUNT inválida (debe ser el JSON en base64)');
+    }
+    initializeApp({ credential: cert(account) });
+  }
+  return getFirestore();
+}
