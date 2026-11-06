@@ -2,6 +2,10 @@
 
 API Node.js + TypeScript (Express) de Synk, salas de estudio. Sprint 0 (TS-00): lee un dato de Firestore (`base/info`) y lo entrega al frontend (React en Vercel). Desplegada en Render con Docker.
 
+**Producción:** https://synk-api-neop.onrender.com · [`/api/health`](https://synk-api-neop.onrender.com/api/health) · [`/api/base`](https://synk-api-neop.onrender.com/api/base) · [Swagger](https://synk-api-neop.onrender.com/api/docs)
+
+> Plan Free de Render: tras 15 min sin uso el servicio se duerme y la primera petición tarda ~50 s.
+
 ## Endpoints
 
 Documentación Swagger: `/api/docs`.
@@ -62,7 +66,7 @@ Secrets del repo: `SONAR_TOKEN`, `RENDER_DEPLOY_HOOK` (la URL del hook de Render
 
 Render: Web Service con "Existing image" desde `ghcr.io/proyecto-integrador-i-miniproyecto-ii/backend:latest` (paquete GHCR público). Configurar las variables `CORS_ORIGIN` (URL de Vercel) y `FIREBASE_SERVICE_ACCOUNT` en Render.
 
-GHCR crea el paquete **privado** en el primer push: entrar a la org → Packages → backend → Package settings → Change visibility → Public (una sola vez). Si no, Render no puede descargar la imagen.
+GHCR crea el paquete **privado** en el primer push: entrar a la org → Packages → backend → Package settings → Change visibility → Public (una sola vez; ya hecho). Si no, Render no puede descargar la imagen.
 
 ## Estructura por capas
 
