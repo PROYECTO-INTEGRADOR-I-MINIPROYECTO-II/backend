@@ -15,6 +15,7 @@ Documentación Swagger: `/api/docs`.
 | GET | `/api/health` | `200 { "status": "ok" }` (no toca Firestore) |
 | GET | `/api/base` | `200 { mensaje, actualizado }`; `404 NOT_FOUND` si no hay dato; `503 DB_UNAVAILABLE` si Firestore no responde |
 
+| POST | `/api/auth/registro` | Público. `{ nombres, apellidos, username, correo, clave, foto? }` -> `201` con el perfil; `400 VALIDATION_ERROR` (con `campo`), `409 EMAIL_TAKEN` / `USERNAME_TAKEN`. Si el username está ocupado se deshace la cuenta de Auth. Luego el cliente inicia sesión con Firebase |
 | GET | `/api/usernames/:username/disponible` | Público. `{ disponible }` (no distingue mayúsculas); `400 USERNAME_INVALID` |
 | GET | `/api/usuarios/yo` | Perfil de la sesión + `proveedores`. Sin perfil (Google nuevo): `username: null` con nombre/foto/correo del token |
 | PATCH | `/api/usuarios/yo` | `{ nombres, apellidos, foto }` (cualquiera); `409 PROFILE_INCOMPLETE` si aún no tiene username |
