@@ -3,6 +3,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import swaggerUi from 'swagger-ui-express';
 import { AppError } from './errors';
 import openapi from './openapi.json';
+import authRoutes from './routes/auth.routes';
 import baseRoutes from './routes/base.routes';
 import usersRoutes from './routes/users.routes';
 
@@ -13,6 +14,7 @@ app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) 
 app.use(express.json({ limit: '200kb' }));
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 app.use('/api', baseRoutes);
+app.use('/api', authRoutes);
 app.use('/api', usersRoutes);
 
 app.use((_req, _res, next) => {
