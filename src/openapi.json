@@ -454,7 +454,8 @@
           "503": {
             "$ref": "#/components/responses/DbUnavailable"
           }
-        }
+        },
+        "description": "Flujo Google: tras iniciar sesión con Google, `GET /api/usuarios/yo` devuelve `username: null`; el cliente muestra «Elige tu username» y llama a este endpoint. Hasta entonces, `PATCH /api/usuarios/yo` responde 409 PROFILE_INCOMPLETE. Nombre, foto y correo se toman del token de Google."
       }
     },
     "/api/usuarios/yo/proveedores/google": {
