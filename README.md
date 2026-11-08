@@ -23,7 +23,7 @@ Documentación Swagger: `/api/docs`.
 | DELETE | `/api/usuarios/yo` | Elimina la cuenta (`204`) |
 | DELETE | `/api/usuarios/yo/proveedores/google` | Desvincula Google (`204`); `409 LAST_PROVIDER` si no tiene contraseña |
 
-Las rutas `/api/usuarios/**` exigen `Authorization: Bearer <ID token de Firebase>`; sin token, inválido, vencido o revocado: `401 UNAUTHENTICATED`.
+Las rutas `/api/usuarios/**` exigen `Authorization: Bearer <ID token de Firebase>`; sin token, inválido, vencido o revocado: `401 UNAUTHENTICATED`. El login lo hace Firebase en el cliente; `GET /api/usuarios/yo` sirve para comprobar la sesión.
 
 Errores: `{ "error": { "code", "message", "campo"? } }` (`campo` indica el campo del formulario). Siempre JSON; un cuerpo mal formado da `400 INVALID_JSON`.
 
