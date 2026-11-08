@@ -25,6 +25,10 @@ export async function registrar(body: Record<string, unknown> | undefined): Prom
     if ((err as { code?: string }).code === 'auth/email-already-exists') {
       throw new AppError(409, 'EMAIL_TAKEN', 'Ese correo ya tiene una cuenta. Inicia sesión.', 'correo');
     }
+    // Respaldo: si Auth rechaza lo que nuestra validación dejó pasar, sigue siendo 400 con campo.
+    const code = (err as { code?: string }).code;
+    if (code === 'auth/invalid-email') throw invalido('correo', 'Escribe un correo con formato nombre@dominio.com.');
+    if (code === 'auth/invalid-password') throw invalido('clave', 'La contraseña no es válida. Usa al menos 8 caracteres.');
     throw err;
   }
   try {

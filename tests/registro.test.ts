@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import app from '../src/app';
 import { getAuthAdmin, getDb } from '../src/config/firebase';
 import { hayEmulador, limpiar } from './emulador';
@@ -46,6 +46,16 @@ describe.skipIf(!hayEmulador)('POST /api/auth/registro (emuladores)', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toMatchObject({ code: 'VALIDATION_ERROR', campo });
     expect((await getAuthAdmin().listUsers()).users).toHaveLength(0);
+  });
+
+  it('Auth rechaza el correo o la clave -> 400 con campo', async () => {
+    const auth = getAuthAdmin();
+    const falla = (code: string) => vi.spyOn(auth, 'createUser').mockRejectedValueOnce(Object.assign(new Error('x'), { code }));
+    falla('auth/invalid-email');
+    expect((await registrar(datos)).body.error).toMatchObject({ code: 'VALIDATION_ERROR', campo: 'correo' });
+    falla('auth/invalid-password');
+    expect((await registrar(datos)).body.error).toMatchObject({ code: 'VALIDATION_ERROR', campo: 'clave' });
+    vi.spyOn(auth, 'createUser').mockRestore();
   });
 
   it('dos registros simultáneos con el mismo username: un 201, un 409 y una sola cuenta', async () => {
