@@ -13,7 +13,7 @@ export type PerfilPublico = Omit<Perfil, 'username' | 'creado'> & {
 };
 
 // Errores de Firestore -> 503 (los AppError, como USERNAME_TAKEN, pasan tal cual).
-async function db<T>(op: Promise<T>): Promise<T> {
+export async function db<T>(op: Promise<T>): Promise<T> {
   try {
     return await op;
   } catch (err) {

@@ -454,7 +454,8 @@
           "503": {
             "$ref": "#/components/responses/DbUnavailable"
           }
-        }
+        },
+        "description": "Flujo Google: tras iniciar sesión con Google, `GET /api/usuarios/yo` devuelve `username: null`; el cliente muestra «Elige tu username» y llama a este endpoint. Hasta entonces, `PATCH /api/usuarios/yo` responde 409 PROFILE_INCOMPLETE. Nombre, foto y correo se toman del token de Google."
       }
     },
     "/api/usuarios/yo/proveedores/google": {
@@ -506,6 +507,133 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/auth/registro": {
+      "post": {
+        "summary": "Registro con correo y contraseña (público). Luego el cliente inicia sesión con Firebase",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "nombres",
+                  "username",
+                  "correo",
+                  "clave"
+                ],
+                "properties": {
+                  "nombres": {
+                    "type": "string"
+                  },
+                  "apellidos": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  },
+                  "correo": {
+                    "type": "string"
+                  },
+                  "clave": {
+                    "type": "string",
+                    "minLength": 8
+                  },
+                  "foto": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              },
+              "example": {
+                "nombres": "Ana",
+                "apellidos": "Pérez",
+                "username": "ana.p",
+                "correo": "ana@correo.com",
+                "clave": "clave-segura-1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cuenta creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Perfil"
+                },
+                "example": {
+                  "uid": "abc123",
+                  "username": "ana.p",
+                  "nombres": "Ana",
+                  "apellidos": "Pérez",
+                  "foto": null,
+                  "correo": "ana@correo.com",
+                  "creado": "2026-01-01T00:00:00.000Z",
+                  "proveedores": [
+                    "password"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dato inválido (campo indica cuál)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Usa al menos 8 caracteres.",
+                    "campo": "clave"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Correo o username ya en uso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "correo": {
+                    "value": {
+                      "error": {
+                        "code": "EMAIL_TAKEN",
+                        "message": "Ese correo ya tiene una cuenta. Inicia sesión.",
+                        "campo": "correo"
+                      }
+                    }
+                  },
+                  "username": {
+                    "value": {
+                      "error": {
+                        "code": "USERNAME_TAKEN",
+                        "message": "Ese username ya está en uso. Elige otro.",
+                        "campo": "username"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
           }
         }
       }

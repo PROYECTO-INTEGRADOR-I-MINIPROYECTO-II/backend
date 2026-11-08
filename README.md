@@ -15,6 +15,7 @@ Documentación Swagger: `/api/docs`.
 | GET | `/api/health` | `200 { "status": "ok" }` (no toca Firestore) |
 | GET | `/api/base` | `200 { mensaje, actualizado }`; `404 NOT_FOUND` si no hay dato; `503 DB_UNAVAILABLE` si Firestore no responde |
 
+| POST | `/api/auth/registro` | Público. `{ nombres, apellidos, username, correo, clave, foto? }` -> `201` con el perfil; `400 VALIDATION_ERROR` (con `campo`), `409 EMAIL_TAKEN` / `USERNAME_TAKEN`. Si el username está ocupado se deshace la cuenta de Auth. Luego el cliente inicia sesión con Firebase |
 | GET | `/api/usernames/:username/disponible` | Público. `{ disponible }` (no distingue mayúsculas); `400 USERNAME_INVALID` |
 | GET | `/api/usuarios/yo` | Perfil de la sesión + `proveedores`. Sin perfil (Google nuevo): `username: null` con nombre/foto/correo del token |
 | PATCH | `/api/usuarios/yo` | `{ nombres, apellidos, foto }` (cualquiera); `409 PROFILE_INCOMPLETE` si aún no tiene username |
@@ -22,7 +23,7 @@ Documentación Swagger: `/api/docs`.
 | DELETE | `/api/usuarios/yo` | Elimina la cuenta (`204`) |
 | DELETE | `/api/usuarios/yo/proveedores/google` | Desvincula Google (`204`); `409 LAST_PROVIDER` si no tiene contraseña |
 
-Las rutas `/api/usuarios/**` exigen `Authorization: Bearer <ID token de Firebase>`; sin token, inválido, vencido o revocado: `401 UNAUTHENTICATED`.
+Las rutas `/api/usuarios/**` exigen `Authorization: Bearer <ID token de Firebase>`; sin token, inválido, vencido o revocado: `401 UNAUTHENTICATED`. El login lo hace Firebase en el cliente; `GET /api/usuarios/yo` sirve para comprobar la sesión.
 
 Errores: `{ "error": { "code", "message", "campo"? } }` (`campo` indica el campo del formulario). Siempre JSON; un cuerpo mal formado da `400 INVALID_JSON`.
 
