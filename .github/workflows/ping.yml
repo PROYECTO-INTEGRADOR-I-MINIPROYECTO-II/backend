@@ -1,0 +1,13 @@
+name: Ping
+
+# Mantiene despierto el servicio de Render (plan Free: se duerme tras 15 min sin uso).
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 90 https://synk-api-neop.onrender.com/api/health

@@ -8,3 +8,6 @@ service-account.json
 key.json
 *service-account*.json
 *firebase-adminsdk*.json
+
+# Emuladores de Firebase
+*-debug.log

@@ -18,9 +18,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
+      - run: npm run test:int
       - name: SonarCloud
         if: env.SONAR_TOKEN != ''
         uses: SonarSource/sonarqube-scan-action@v6
