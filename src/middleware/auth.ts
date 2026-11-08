@@ -17,7 +17,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const decoded = await getAuthAdmin().verifyIdToken(token, true);
     Object.assign(res.locals, { uid: decoded.uid, token: decoded } satisfies AuthLocals);
     next();
-  } catch {
-    next(sinSesion);
+  } catch (err) {
+    if (String((err as { code?: unknown }).code).startsWith('auth/')) return next(sinSesion);
+    console.error('Error verificando el token:', err);
+    next(new AppError(503, 'AUTH_UNAVAILABLE', 'No pudimos verificar tu sesión. Intenta de nuevo en unos segundos.'));
   }
 }

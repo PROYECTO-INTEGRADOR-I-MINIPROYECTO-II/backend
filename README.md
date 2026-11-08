@@ -89,6 +89,10 @@ Render: Web Service con "Existing image" desde `ghcr.io/proyecto-integrador-i-mi
 
 GHCR crea el paquete **privado** en el primer push: entrar a la org → Packages → backend → Package settings → Change visibility → Public (una sola vez; ya hecho). Si no, Render no puede descargar la imagen.
 
+## Riesgos pendientes
+
+Sin límite de peticiones (rate limit) en `POST /api/auth/registro` ni en la disponibilidad de username: permiten enumerar usernames y crear cuentas en masa. Pendiente para S2.
+
 ## Pasos manuales del equipo (Firebase real)
 
 El código nunca toca el Firebase real; esto lo hace una persona del equipo con acceso:

@@ -84,6 +84,34 @@ describe.skipIf(!hayEmulador)('usuarios (emuladores)', () => {
       expect(vacio.body.error.campo).toBe('nombres');
     });
 
+    it('PATCH con null: nombres/apellidos -> 400, foto null la quita', async () => {
+      const { idToken } = await crearCuenta('a@x.com');
+      await request(app).put('/api/usuarios/yo/username').set(bearer(idToken)).send({ username: 'ana' });
+      const patch = (b: object) => request(app).patch('/api/usuarios/yo').set(bearer(idToken)).send(b);
+      expect((await patch({ nombres: null })).body.error).toMatchObject({ code: 'VALIDATION_ERROR', campo: 'nombres' });
+      expect((await patch({ apellidos: null })).body.error).toMatchObject({ code: 'VALIDATION_ERROR', campo: 'apellidos' });
+      await patch({ foto: 'https://example.com/a.png' }).expect(200);
+      expect((await patch({ foto: null })).body.foto).toBeNull();
+    });
+
+    it('PATCH foto data URL: válida, demasiado grande y MIME no permitido', async () => {
+      const { idToken } = await crearCuenta('a@x.com');
+      await request(app).put('/api/usuarios/yo/username').set(bearer(idToken)).send({ username: 'ana' });
+      const patch = (foto: string) => request(app).patch('/api/usuarios/yo').set(bearer(idToken)).send({ foto });
+      const ok = 'data:image/png;base64,iVBORw0KGgo=';
+      expect((await patch(ok)).body.foto).toBe(ok);
+      const grande = await patch(`data:image/png;base64,${'A'.repeat(100_000)}`);
+      expect(grande.body.error).toMatchObject({ code: 'VALIDATION_ERROR', campo: 'foto' });
+      expect((await patch('data:image/gif;base64,R0lGODlh')).body.error.campo).toBe('foto');
+    });
+
+    it('cuerpo muy grande -> 413 JSON', async () => {
+      const { idToken } = await crearCuenta('a@x.com');
+      const res = await request(app).patch('/api/usuarios/yo').set(bearer(idToken)).send({ foto: 'A'.repeat(300_000) });
+      expect(res.status).toBe(413);
+      expect(res.body.error.code).toBe('PAYLOAD_TOO_LARGE');
+    });
+
     it('DELETE yo borra Auth y Firestore y libera el username', async () => {
       const { idToken, localId } = await crearCuenta('a@x.com');
       await request(app).put('/api/usuarios/yo/username').set(bearer(idToken)).send({ username: 'ana' });

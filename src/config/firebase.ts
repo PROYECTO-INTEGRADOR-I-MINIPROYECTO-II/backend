@@ -5,8 +5,10 @@ import { getFirestore } from 'firebase-admin/firestore';
 // Perezoso: el server arranca sin credenciales; el error aparece al primer uso.
 function init() {
   if (getApps().length) return;
+  const emulador = process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST;
+  if (process.env.NODE_ENV === 'production' && emulador) throw new Error('Los emuladores de Firebase no se pueden usar en producción');
   // Con emulador no hace falta credencial (proyecto demo-*: nunca toca un proyecto real).
-  if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+  if (emulador) {
     initializeApp({ projectId: process.env.GCLOUD_PROJECT ?? 'demo-synk' });
     return;
   }

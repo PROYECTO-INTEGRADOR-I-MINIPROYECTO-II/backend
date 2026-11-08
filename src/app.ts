@@ -33,6 +33,11 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     res.status(413).json({ error: { code: 'PAYLOAD_TOO_LARGE', message: 'El cuerpo es demasiado grande.' } });
     return;
   }
+  const status = (err as { status?: number }).status;
+  if (type && status && status >= 400 && status < 500) {
+    res.status(status).json({ error: { code: 'BAD_REQUEST', message: 'La petición no es válida.' } });
+    return;
+  }
   console.error(err);
   res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Ocurrió un error inesperado' } });
 });

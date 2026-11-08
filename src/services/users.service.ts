@@ -84,7 +84,7 @@ export async function actualizarYo(uid: string, body: Record<string, unknown> | 
   }
   const datos: Partial<Perfil> = {};
   if (nombres !== undefined || apellidos !== undefined) {
-    Object.assign(datos, validarNombres(nombres ?? actual.nombres, apellidos ?? actual.apellidos));
+    Object.assign(datos, validarNombres(nombres === undefined ? actual.nombres : nombres, apellidos === undefined ? actual.apellidos : apellidos));
   }
   if (foto !== undefined) datos.foto = validarFoto(foto);
   const perfil = await db(repo.actualizarPerfil(uid, datos));
