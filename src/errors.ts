@@ -3,6 +3,7 @@ export class AppError extends Error {
     public status: number,
     public code: string,
     message: string,
+    public campo?: string,
   ) {
     super(message);
   }

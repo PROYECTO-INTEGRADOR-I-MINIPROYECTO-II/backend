@@ -1,0 +1,9 @@
+rules_version = '2';
+// Solo el backend (firebase-admin) accede a Firestore; el acceso directo desde clientes queda negado.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
