@@ -1,6 +1,10 @@
 {
   "openapi": "3.0.3",
-  "info": { "title": "Synk API", "version": "0.1.0", "description": "API de Synk (salas de estudio)" },
+  "info": {
+    "title": "Synk API",
+    "version": "0.1.0",
+    "description": "API de Synk (salas de estudio)"
+  },
   "paths": {
     "/api/health": {
       "get": {
@@ -8,7 +12,19 @@
         "responses": {
           "200": {
             "description": "Servicio activo",
-            "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string", "example": "ok" } } } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -24,15 +40,473 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "mensaje": { "type": "string", "example": "Hola desde Firestore 👋" },
-                    "actualizado": { "type": "string", "format": "date-time" }
+                    "mensaje": {
+                      "type": "string",
+                      "example": "Hola desde Firestore 👋"
+                    },
+                    "actualizado": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
                   }
                 }
               }
             }
           },
-          "404": { "description": "Aún no hay datos", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-          "503": { "description": "Firestore no disponible", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+          "404": {
+            "description": "Aún no hay datos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Firestore no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/usernames/{username}/disponible": {
+      "get": {
+        "summary": "¿Está libre el username? (público; no distingue mayúsculas)",
+        "tags": [
+          "Usuarios"
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "ana.p"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "disponible": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "disponible": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Formato inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "USERNAME_INVALID",
+                    "message": "Los espacios no están permitidos. Usa punto o guion bajo para separar.",
+                    "campo": "username"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      }
+    },
+    "/api/usuarios/yo": {
+      "get": {
+        "summary": "Perfil de la sesión (username null si aún no lo elige)",
+        "tags": [
+          "Usuarios"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Perfil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Perfil"
+                },
+                "examples": {
+                  "conPerfil": {
+                    "summary": "Con username",
+                    "value": {
+                      "uid": "abc123",
+                      "username": "ana.p",
+                      "nombres": "Ana",
+                      "apellidos": "Pérez",
+                      "foto": null,
+                      "correo": "ana@correo.com",
+                      "creado": "2026-01-01T00:00:00.000Z",
+                      "proveedores": [
+                        "password"
+                      ]
+                    }
+                  },
+                  "sinUsername": {
+                    "summary": "Cuenta de Google que aún no eligió username",
+                    "value": {
+                      "uid": "abc123",
+                      "username": null,
+                      "nombres": "Ana Pérez",
+                      "apellidos": "",
+                      "foto": "https://lh3.googleusercontent.com/a/foto",
+                      "correo": "ana@gmail.com",
+                      "proveedores": [
+                        "google.com"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Actualiza nombres, apellidos y/o foto (requiere username)",
+        "tags": [
+          "Usuarios"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombres": {
+                    "type": "string"
+                  },
+                  "apellidos": {
+                    "type": "string"
+                  },
+                  "foto": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "URL https, data URL png/jpeg/webp (≤100 KB) o null"
+                  }
+                }
+              },
+              "example": {
+                "nombres": "Ana María",
+                "apellidos": "Pérez",
+                "foto": null
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Perfil actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Perfil"
+                },
+                "examples": {
+                  "conPerfil": {
+                    "summary": "Con username",
+                    "value": {
+                      "uid": "abc123",
+                      "username": "ana.p",
+                      "nombres": "Ana",
+                      "apellidos": "Pérez",
+                      "foto": null,
+                      "correo": "ana@correo.com",
+                      "creado": "2026-01-01T00:00:00.000Z",
+                      "proveedores": [
+                        "password"
+                      ]
+                    }
+                  },
+                  "sinUsername": {
+                    "summary": "Cuenta de Google que aún no eligió username",
+                    "value": {
+                      "uid": "abc123",
+                      "username": null,
+                      "nombres": "Ana Pérez",
+                      "apellidos": "",
+                      "foto": "https://lh3.googleusercontent.com/a/foto",
+                      "correo": "ana@gmail.com",
+                      "proveedores": [
+                        "google.com"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dato inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "La foto debe ser una URL https o una imagen png, jpeg o webp de hasta 100 KB.",
+                    "campo": "foto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "409": {
+            "description": "Aún no eligió username",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "PROFILE_INCOMPLETE",
+                    "message": "Primero elige tu username."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Elimina la cuenta (users, usernames y usuario de Auth)",
+        "tags": [
+          "Usuarios"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Cuenta eliminada"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      }
+    },
+    "/api/usuarios/yo/username": {
+      "put": {
+        "summary": "Elige o cambia el username (crea el perfil si no existe, libera el anterior)",
+        "tags": [
+          "Usuarios"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              },
+              "example": {
+                "username": "ana.p"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Perfil con el nuevo username",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Perfil"
+                },
+                "examples": {
+                  "conPerfil": {
+                    "summary": "Con username",
+                    "value": {
+                      "uid": "abc123",
+                      "username": "ana.p",
+                      "nombres": "Ana",
+                      "apellidos": "Pérez",
+                      "foto": null,
+                      "correo": "ana@correo.com",
+                      "creado": "2026-01-01T00:00:00.000Z",
+                      "proveedores": [
+                        "password"
+                      ]
+                    }
+                  },
+                  "sinUsername": {
+                    "summary": "Cuenta de Google que aún no eligió username",
+                    "value": {
+                      "uid": "abc123",
+                      "username": null,
+                      "nombres": "Ana Pérez",
+                      "apellidos": "",
+                      "foto": "https://lh3.googleusercontent.com/a/foto",
+                      "correo": "ana@gmail.com",
+                      "proveedores": [
+                        "google.com"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Formato inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "USERNAME_INVALID",
+                    "message": "Máximo 20 caracteres (llevas 25).",
+                    "campo": "username"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "409": {
+            "description": "Ya está en uso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "USERNAME_TAKEN",
+                    "message": "Ese username ya está en uso. Elige otro.",
+                    "campo": "username"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      }
+    },
+    "/api/usuarios/yo/proveedores/google": {
+      "delete": {
+        "summary": "Desvincula Google (solo si la cuenta tiene contraseña)",
+        "tags": [
+          "Usuarios"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Google desvinculado"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Google no está vinculado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Tu cuenta no tiene Google vinculado."
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Es el único proveedor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "LAST_PROVIDER",
+                    "message": "Google es tu único método de acceso. Agrega una contraseña antes de desvincularlo."
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -45,8 +519,99 @@
           "error": {
             "type": "object",
             "properties": {
-              "code": { "type": "string", "example": "DB_UNAVAILABLE" },
-              "message": { "type": "string" }
+              "code": {
+                "type": "string",
+                "example": "DB_UNAVAILABLE"
+              },
+              "message": {
+                "type": "string"
+              },
+              "campo": {
+                "type": "string",
+                "example": "username",
+                "description": "Campo del formulario al que aplica el error (si corresponde)"
+              }
+            }
+          }
+        }
+      },
+      "Perfil": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "nombres": {
+            "type": "string"
+          },
+          "apellidos": {
+            "type": "string"
+          },
+          "foto": {
+            "type": "string",
+            "nullable": true
+          },
+          "correo": {
+            "type": "string"
+          },
+          "creado": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "proveedores": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "password",
+                "google.com"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Firebase ID token",
+        "description": "ID token de Firebase Auth del cliente (getIdToken)."
+      }
+    },
+    "responses": {
+      "Unauthenticated": {
+        "description": "Falta el token, es inválido, venció o fue revocado",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "UNAUTHENTICATED",
+                "message": "Inicia sesión para continuar."
+              }
+            }
+          }
+        }
+      },
+      "DbUnavailable": {
+        "description": "Firestore no disponible",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "DB_UNAVAILABLE",
+                "message": "No pudimos conectar con la base de datos. Intenta de nuevo en unos segundos."
+              }
             }
           }
         }
