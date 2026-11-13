@@ -511,6 +511,140 @@
         }
       }
     },
+    "/api/salas": {
+      "get": {
+        "summary": "Lista las salas privadas creadas por la sesión",
+        "tags": [
+          "Salas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Salas propias, de más reciente a más antigua",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "salas"
+                  ],
+                  "properties": {
+                    "salas": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Sala"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "salas": [
+                    {
+                      "id": "nP8dK1zX4qWm7R2s9aBc",
+                      "nombre": "Estudio de cálculo",
+                      "descripcion": "Repaso del parcial",
+                      "ownerUid": "abc123",
+                      "creado": "2026-01-01T00:00:00.000Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      },
+      "post": {
+        "summary": "Crea una sala privada para la sesión",
+        "tags": [
+          "Salas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "nombre"
+                ],
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "descripcion": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              },
+              "example": {
+                "nombre": "Estudio de cálculo",
+                "descripcion": "Repaso del parcial"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sala creada; su ID es el identificador privado para compartir",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sala"
+                },
+                "example": {
+                  "id": "nP8dK1zX4qWm7R2s9aBc",
+                  "nombre": "Estudio de cálculo",
+                  "descripcion": "Repaso del parcial",
+                  "ownerUid": "abc123",
+                  "creado": "2026-01-01T00:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nombre o descripción inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Escribe el nombre de la sala.",
+                    "campo": "nombre"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      }
+    },
     "/api/auth/registro": {
       "post": {
         "summary": "Registro con correo y contraseña (público). Luego el cliente inicia sesión con Firebase",
@@ -698,6 +832,35 @@
                 "password",
                 "google.com"
               ]
+            }
+          }
+        },
+        "Sala": {
+          "type": "object",
+          "required": [
+            "id",
+            "nombre",
+            "descripcion",
+            "ownerUid",
+            "creado"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Identificador privado generado por Firestore."
+            },
+            "nombre": {
+              "type": "string"
+            },
+            "descripcion": {
+              "type": "string"
+            },
+            "ownerUid": {
+              "type": "string"
+            },
+            "creado": {
+              "type": "string",
+              "format": "date-time"
             }
           }
         }

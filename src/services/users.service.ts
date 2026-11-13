@@ -2,6 +2,7 @@ import { DecodedIdToken } from 'firebase-admin/auth';
 import { getAuthAdmin } from '../config/firebase';
 import { AppError } from '../errors';
 import * as repo from '../repositories/users.repository';
+import * as roomsRepo from '../repositories/rooms.repository';
 import { Perfil } from '../repositories/users.repository';
 import { analizarNombre, fotoValida, NOMBRE_MAX_TOTAL, validarUsername } from '../validaciones';
 
@@ -92,6 +93,7 @@ export async function actualizarYo(uid: string, body: Record<string, unknown> | 
 }
 
 export async function eliminarYo(uid: string) {
+  await db(roomsRepo.borrarSalasDePropietario(uid));
   await db(repo.borrarPerfil(uid));
   await getAuthAdmin().deleteUser(uid);
 }

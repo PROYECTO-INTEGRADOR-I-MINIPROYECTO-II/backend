@@ -5,6 +5,7 @@ import { AppError } from './errors';
 import openapi from './openapi.json';
 import authRoutes from './routes/auth.routes';
 import baseRoutes from './routes/base.routes';
+import roomsRoutes from './routes/rooms.routes';
 import usersRoutes from './routes/users.routes';
 
 const app = express();
@@ -16,6 +17,7 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 app.use('/api', baseRoutes);
 app.use('/api', authRoutes);
 app.use('/api', usersRoutes);
+app.use('/api', roomsRoutes);
 
 app.use((_req, _res, next) => {
   next(new AppError(404, 'NOT_FOUND', 'Ruta no encontrada.'));
