@@ -13,10 +13,9 @@ services:
       retries: 3
       start_period: 10s
 
-  # Descomentar cuando exista el frontend
-  # web:
-  #   build: ../frontend
-  #   ports:
-  #     - "5173:80"
-  #   depends_on:
-  #     - api
+  web:
+    build: ../frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
