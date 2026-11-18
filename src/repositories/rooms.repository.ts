@@ -4,7 +4,7 @@ export interface Sala {
   id: string;
   nombre: string;
   descripcion: string;
-  ownerUid: string;
+  uid: string;
   creado: string;
 }
 
@@ -15,27 +15,27 @@ export interface NuevaSala {
 
 const salas = () => getDb().collection('rooms');
 
-export async function crearSala(ownerUid: string, datos: NuevaSala): Promise<Sala> {
+export async function crearSala(uid: string, datos: NuevaSala): Promise<Sala> {
   const ref = salas().doc();
-  const sala: Omit<Sala, 'id'> = { ...datos, ownerUid, creado: new Date().toISOString() };
+  const sala: Omit<Sala, 'id'> = { ...datos, uid, creado: new Date().toISOString() };
   await ref.create(sala);
   return { id: ref.id, ...sala };
 }
 
-export async function listarSalas(ownerUid: string): Promise<Sala[]> {
-  const snapshot = await salas().where('ownerUid', '==', ownerUid).get();
+export async function listarSalas(uid: string): Promise<Sala[]> {
+  const snapshot = await salas().where('uid', '==', uid).get();
   return snapshot.docs
     .map((doc) => ({ id: doc.id, ...(doc.data() as Omit<Sala, 'id'>) }))
     .sort((a, b) => b.creado.localeCompare(a.creado) || a.id.localeCompare(b.id));
 }
 
-export async function borrarSalasDePropietario(ownerUid: string): Promise<void> {
+export async function borrarSalasDePropietario(uid: string): Promise<void> {
   const db = getDb();
   const collection = salas();
   const tamanoLote = 450;
 
   while (true) {
-    const snapshot = await collection.where('ownerUid', '==', ownerUid).limit(tamanoLote).get();
+    const snapshot = await collection.where('uid', '==', uid).limit(tamanoLote).get();
     if (snapshot.empty) return;
     const batch = db.batch();
     snapshot.docs.forEach((doc) => batch.delete(doc.ref));

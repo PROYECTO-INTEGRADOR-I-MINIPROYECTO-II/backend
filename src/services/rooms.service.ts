@@ -42,10 +42,10 @@ function validarNuevaSala(body: unknown): NuevaSala {
   return { nombre, descripcion };
 }
 
-export async function crearSala(ownerUid: string, body: unknown) {
-  return db(repo.crearSala(ownerUid, validarNuevaSala(body)));
+export async function crearSala(uid: string, body: unknown) {
+  return db(repo.crearSala(uid, validarNuevaSala(body)));
 }
 
-export async function listarSalas(ownerUid: string) {
-  return { salas: await db(repo.listarSalas(ownerUid)) };
+export async function listarSalas(uid: string) {
+  return { salas: await db(repo.listarSalas(uid)) };
 }

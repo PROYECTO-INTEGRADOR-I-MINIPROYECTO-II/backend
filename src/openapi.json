@@ -547,7 +547,7 @@
                       "id": "nP8dK1zX4qWm7R2s9aBc",
                       "nombre": "Estudio de cálculo",
                       "descripcion": "Repaso del parcial",
-                      "ownerUid": "abc123",
+                      "uid": "abc123",
                       "creado": "2026-01-01T00:00:00.000Z"
                     }
                   ]
@@ -613,7 +613,7 @@
                   "id": "nP8dK1zX4qWm7R2s9aBc",
                   "nombre": "Estudio de cálculo",
                   "descripcion": "Repaso del parcial",
-                  "ownerUid": "abc123",
+                  "uid": "abc123",
                   "creado": "2026-01-01T00:00:00.000Z"
                 }
               }
@@ -841,7 +841,7 @@
             "id",
             "nombre",
             "descripcion",
-            "ownerUid",
+            "uid",
             "creado"
           ],
           "properties": {
@@ -855,7 +855,7 @@
             "descripcion": {
               "type": "string"
             },
-            "ownerUid": {
+            "uid": {
               "type": "string"
             },
             "creado": {

@@ -23,13 +23,13 @@ describe('servicio de salas', () => {
       id: 'sala-1',
       nombre: 'Estudio de cálculo',
       descripcion: 'Repaso',
-      ownerUid: 'uid-1',
+      uid: 'uid-1',
       creado: '2026-01-01T00:00:00.000Z',
     };
     crearSalaRepo.mockResolvedValue(sala);
 
     await expect(
-      svc.crearSala('uid-1', { nombre: '  Estudio de cálculo ', descripcion: ' Repaso ', ownerUid: 'otro-uid' }),
+      svc.crearSala('uid-1', { nombre: '  Estudio de cálculo ', descripcion: ' Repaso ', uid: 'otro-uid' }),
     ).resolves.toEqual(sala);
     expect(crearSalaRepo).toHaveBeenCalledWith('uid-1', { nombre: 'Estudio de cálculo', descripcion: 'Repaso' });
   });

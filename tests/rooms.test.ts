@@ -27,7 +27,7 @@ describe.skipIf(!hayEmulador)('salas (emuladores)', () => {
     expect(creada.body).toMatchObject({
       nombre: 'Estudio de cálculo',
       descripcion: 'Repaso del parcial',
-      ownerUid: propietaria.localId,
+      uid: propietaria.localId,
     });
     expect(creada.body.id).toBeTruthy();
     expect(creada.body.creado).toBeTruthy();
@@ -57,7 +57,7 @@ describe.skipIf(!hayEmulador)('salas (emuladores)', () => {
 
     await request(app).delete('/api/usuarios/yo').set(bearer(idToken)).expect(204);
 
-    const restantes = await getDb().collection('rooms').where('ownerUid', '==', localId).get();
+    const restantes = await getDb().collection('rooms').where('uid', '==', localId).get();
     expect(restantes.empty).toBe(true);
   });
 });
