@@ -22,6 +22,8 @@ Documentación Swagger: `/api/docs`.
 | PUT | `/api/usuarios/yo/username` | `{ username }`: crea el perfil o cambia el username (libera el anterior); `409 USERNAME_TAKEN` |
 | DELETE | `/api/usuarios/yo` | Elimina la cuenta (`204`) |
 | DELETE | `/api/usuarios/yo/proveedores/google` | Desvincula Google (`204`); `409 LAST_PROVIDER` si no tiene contraseña |
+| POST | `/api/salas` | Crea una sala privada `{ nombre, descripcion? }` (`201`); el servidor asigna el ID y propietario |
+| GET | `/api/salas` | Lista las salas privadas creadas por la sesión (`{ salas }`) |
 
 Las rutas `/api/usuarios/**` exigen `Authorization: Bearer <ID token de Firebase>`; sin token, inválido, vencido o revocado: `401 UNAUTHENTICATED`. El login lo hace Firebase en el cliente; `GET /api/usuarios/yo` sirve para comprobar la sesión.
 
@@ -31,7 +33,7 @@ Errores: `{ "error": { "code", "message", "campo"? } }` (`campo` indica el campo
 
 `users/{uid}` y `usernames/{username en minúsculas}` se escriben siempre en la misma transacción. `firestore.rules` niega todo acceso directo: solo el backend lee/escribe.
 
-Política al eliminar la cuenta: hoy se borran `users`, `usernames` y el usuario de Firebase Auth. Cuando existan las salas (S2), también se borrarán las salas que creó y sus mensajes en otras salas quedarán como «Usuario eliminado».
+Política al eliminar la cuenta: se borran las salas creadas por el usuario, `users`, `usernames` y el usuario de Firebase Auth. Las salas son privadas y solo aparecen en el listado de su propietario; el ID generado por Firestore identifica la sala.
 
 ## Correr local
 
