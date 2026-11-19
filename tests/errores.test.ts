@@ -44,13 +44,23 @@ describe('caminos de error', () => {
 
   it('PATCH correo: si falla Firestore revierte el correo en Auth y responde 503', async () => {
     vi.mocked(getPerfil).mockResolvedValue({ username: 'ana', nombres: 'Ana', apellidos: '', foto: null, correo: 'a@x.com', creado: '' });
-    auth.verifyIdToken.mockResolvedValue({ uid: 'u1', auth_time: Math.floor(Date.now() / 1000) });
+    auth.verifyIdToken.mockResolvedValue({ uid: 'u1', email: 'a@x.com', auth_time: Math.floor(Date.now() / 1000) });
     vi.mocked(actualizarPerfil).mockRejectedValue(new Error('boom'));
     const res = await request(app).patch('/api/usuarios/yo').set(bearer).send({ correo: 'n@x.com' });
     expect(res.status).toBe(503);
     expect(res.body.error.code).toBe('DB_UNAVAILABLE');
     expect(auth.updateUser).toHaveBeenNthCalledWith(1, 'u1', { email: 'n@x.com' });
     expect(auth.updateUser).toHaveBeenNthCalledWith(2, 'u1', { email: 'a@x.com' });
+  });
+
+  it('PATCH correo: si el rollback también falla sigue respondiendo 503', async () => {
+    vi.mocked(getPerfil).mockResolvedValue({ username: 'ana', nombres: 'Ana', apellidos: '', foto: null, correo: '', creado: '' });
+    auth.verifyIdToken.mockResolvedValue({ uid: 'u1', email: 'a@x.com', auth_time: Math.floor(Date.now() / 1000) });
+    vi.mocked(actualizarPerfil).mockRejectedValue(new Error('boom'));
+    auth.updateUser.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('rollback'));
+    const res = await request(app).patch('/api/usuarios/yo').set(bearer).send({ correo: 'n@x.com' });
+    expect(res.status).toBe(503);
+    expect(auth.updateUser).toHaveBeenCalledTimes(2);
   });
 
   it('error inesperado -> 500 INTERNAL_ERROR JSON', async () => {

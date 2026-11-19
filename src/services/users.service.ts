@@ -78,11 +78,12 @@ export async function ponerUsername(uid: string, token: DecodedIdToken, username
 const REAUTH_MAX_SEG = 5 * 60;
 
 // Valida, exige reautenticación reciente y cambia el correo en Auth.
-async function cambiarCorreoAuth(uid: string, token: DecodedIdToken, valor: unknown): Promise<void> {
+async function cambiarCorreoAuth(uid: string, token: DecodedIdToken, valor: unknown): Promise<string> {
   const msg = typeof valor === 'string' ? validarCorreo(valor) : 'Escribe tu correo.';
   if (msg || typeof valor !== 'string') throw invalido('correo', msg ?? '');
   // Un token robado no debe poder secuestrar la cuenta cambiando el correo: se exige inicio de sesión reciente.
-  if (Date.now() / 1000 - token.auth_time > REAUTH_MAX_SEG) {
+  // Falla cerrada: sin auth_time (NaN) también se exige reautenticar.
+  if (!(Date.now() / 1000 - token.auth_time <= REAUTH_MAX_SEG)) {
     throw new AppError(401, 'REAUTH_REQUIRED', 'Por seguridad, vuelve a iniciar sesión para cambiar tu correo.', 'correo');
   }
   const correo = valor.trim();
@@ -94,6 +95,7 @@ async function cambiarCorreoAuth(uid: string, token: DecodedIdToken, valor: unkn
     if (code === 'auth/invalid-email') throw invalido('correo', 'Escribe un correo con formato nombre@dominio.com.');
     throw err;
   }
+  return correo;
 }
 
 export async function actualizarYo(uid: string, token: DecodedIdToken, body: Record<string, unknown> | undefined): Promise<PerfilPublico> {
@@ -108,17 +110,17 @@ export async function actualizarYo(uid: string, token: DecodedIdToken, body: Rec
     Object.assign(datos, validarNombres(nombres === undefined ? actual.nombres : nombres, apellidos === undefined ? actual.apellidos : apellidos));
   }
   if (foto !== undefined) datos.foto = validarFoto(foto);
-  const cambiaCorreo = correo !== undefined && !(typeof correo === 'string' && correo.trim().toLowerCase() === actual.correo.trim().toLowerCase());
-  if (cambiaCorreo) {
-    await cambiarCorreoAuth(uid, token, correo);
-    datos.correo = (correo as string).trim();
-  }
+  // El correo vigente es el de Auth (el perfil de Google puede tener `correo: ''`).
+  const anterior = correo === undefined ? '' : token.email ?? (await getAuthAdmin().getUser(uid)).email ?? '';
+  const cambiaCorreo = correo !== undefined && !(typeof correo === 'string' && correo.trim().toLowerCase() === anterior.trim().toLowerCase());
+  if (cambiaCorreo) datos.correo = await cambiarCorreoAuth(uid, token, correo);
   let perfil: Perfil;
   try {
     perfil = Object.keys(datos).length ? await db(repo.actualizarPerfil(uid, datos)) : actual;
   } catch (err) {
     // Sin cuentas inconsistentes: si falla Firestore, el correo de Auth vuelve al anterior.
-    if (cambiaCorreo) await getAuthAdmin().updateUser(uid, { email: actual.correo }).catch((e) => console.error('No se pudo revertir el correo:', e));
+    // shortcut: rollback fallido solo se registra, cuenta queda inconsistente; reconciliar si pasa en producción
+    if (cambiaCorreo) await getAuthAdmin().updateUser(uid, { email: anterior }).catch((e) => console.error('No se pudo revertir el correo:', e));
     throw err;
   }
   return { uid, ...perfil, proveedores: await proveedoresDe(uid) };

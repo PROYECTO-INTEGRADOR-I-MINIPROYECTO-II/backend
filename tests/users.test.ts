@@ -1,6 +1,6 @@
 import { getAuth } from 'firebase-admin/auth';
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import app from '../src/app';
 import { getAuthAdmin, getDb } from '../src/config/firebase';
 import { crearCuenta, crearCuentaGoogle, hayEmulador, limpiar } from './emulador';
@@ -10,6 +10,7 @@ const bearer = (t: string) => ({ Authorization: `Bearer ${t}` });
 // Solo corre con los emuladores (npm run test:int); con `npm test` se omite.
 describe.skipIf(!hayEmulador)('usuarios (emuladores)', () => {
   beforeEach(limpiar);
+  afterEach(() => vi.restoreAllMocks());
 
   it('401 sin token y con token inválido', async () => {
     const sin = await request(app).get('/api/usuarios/yo');
@@ -123,10 +124,18 @@ describe.skipIf(!hayEmulador)('usuarios (emuladores)', () => {
         const real = await getAuthAdmin().verifyIdToken(idToken);
         vi.spyOn(getAuthAdmin(), 'verifyIdToken').mockResolvedValue({ ...real, auth_time: real.auth_time - 10 * 60 });
         const res = await patch({ correo: 'nuevo@x.com' });
-        vi.restoreAllMocks();
         expect(res.status).toBe(401);
         expect(res.body.error).toMatchObject({ code: 'REAUTH_REQUIRED', campo: 'correo' });
         expect((await getAuthAdmin().getUser(localId)).email).toBe('a@x.com');
+      });
+
+      it('token sin auth_time -> 401 REAUTH_REQUIRED', async () => {
+        const { idToken, patch } = await preparar();
+        const { auth_time, ...sinAuthTime } = await getAuthAdmin().verifyIdToken(idToken);
+        vi.spyOn(getAuthAdmin(), 'verifyIdToken').mockResolvedValue(sinAuthTime as never);
+        const res = await patch({ correo: 'nuevo@x.com' });
+        expect(res.status).toBe(401);
+        expect(res.body.error.code).toBe('REAUTH_REQUIRED');
       });
 
       it('mismo correo (sin distinguir mayúsculas) -> 200 sin reautenticar ni cambios', async () => {
@@ -134,7 +143,6 @@ describe.skipIf(!hayEmulador)('usuarios (emuladores)', () => {
         const real = await getAuthAdmin().verifyIdToken(idToken);
         vi.spyOn(getAuthAdmin(), 'verifyIdToken').mockResolvedValue({ ...real, auth_time: real.auth_time - 10 * 60 });
         const res = await patch({ correo: ' A@X.com ' });
-        vi.restoreAllMocks();
         expect(res.status).toBe(200);
         expect(res.body.correo).toBe('a@x.com');
         expect((await getAuthAdmin().getUser(localId)).email).toBe('a@x.com');
