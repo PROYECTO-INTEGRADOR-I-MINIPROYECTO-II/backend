@@ -3,7 +3,7 @@ import { getAuthAdmin } from '../config/firebase';
 import { AppError } from '../errors';
 import * as repo from '../repositories/users.repository';
 import { Perfil } from '../repositories/users.repository';
-import { analizarNombre, fotoValida, NOMBRE_MAX_TOTAL, validarUsername } from '../validaciones';
+import { analizarNombre, fotoValida, NOMBRE_MAX_TOTAL, validarCorreo, validarUsername } from '../validaciones';
 
 export type PerfilPublico = Omit<Perfil, 'username' | 'creado'> & {
   uid: string;
@@ -75,19 +75,52 @@ export async function ponerUsername(uid: string, token: DecodedIdToken, username
   return { uid, ...perfil, proveedores: await proveedoresDe(uid) };
 }
 
-export async function actualizarYo(uid: string, body: Record<string, unknown> | undefined): Promise<PerfilPublico> {
+const REAUTH_MAX_SEG = 5 * 60;
+
+// Valida, exige reautenticación reciente y cambia el correo en Auth.
+async function cambiarCorreoAuth(uid: string, token: DecodedIdToken, valor: unknown): Promise<void> {
+  const msg = typeof valor === 'string' ? validarCorreo(valor) : 'Escribe tu correo.';
+  if (msg || typeof valor !== 'string') throw invalido('correo', msg ?? '');
+  // Un token robado no debe poder secuestrar la cuenta cambiando el correo: se exige inicio de sesión reciente.
+  if (Date.now() / 1000 - token.auth_time > REAUTH_MAX_SEG) {
+    throw new AppError(401, 'REAUTH_REQUIRED', 'Por seguridad, vuelve a iniciar sesión para cambiar tu correo.', 'correo');
+  }
+  const correo = valor.trim();
+  try {
+    await getAuthAdmin().updateUser(uid, { email: correo });
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    if (code === 'auth/email-already-exists') throw new AppError(409, 'EMAIL_TAKEN', 'Ese correo ya está registrado en otra cuenta.', 'correo');
+    if (code === 'auth/invalid-email') throw invalido('correo', 'Escribe un correo con formato nombre@dominio.com.');
+    throw err;
+  }
+}
+
+export async function actualizarYo(uid: string, token: DecodedIdToken, body: Record<string, unknown> | undefined): Promise<PerfilPublico> {
   const actual = await db(repo.getPerfil(uid));
   if (!actual) throw new AppError(409, 'PROFILE_INCOMPLETE', 'Primero elige tu username.');
-  const { nombres, apellidos, foto } = body ?? {};
-  if (nombres === undefined && apellidos === undefined && foto === undefined) {
-    throw invalido('nombres', 'Envía al menos nombres, apellidos o foto.');
+  const { nombres, apellidos, foto, correo } = body ?? {};
+  if (nombres === undefined && apellidos === undefined && foto === undefined && correo === undefined) {
+    throw invalido('nombres', 'Envía al menos nombres, apellidos, foto o correo.');
   }
   const datos: Partial<Perfil> = {};
   if (nombres !== undefined || apellidos !== undefined) {
     Object.assign(datos, validarNombres(nombres === undefined ? actual.nombres : nombres, apellidos === undefined ? actual.apellidos : apellidos));
   }
   if (foto !== undefined) datos.foto = validarFoto(foto);
-  const perfil = await db(repo.actualizarPerfil(uid, datos));
+  const cambiaCorreo = correo !== undefined && !(typeof correo === 'string' && correo.trim().toLowerCase() === actual.correo.trim().toLowerCase());
+  if (cambiaCorreo) {
+    await cambiarCorreoAuth(uid, token, correo);
+    datos.correo = (correo as string).trim();
+  }
+  let perfil: Perfil;
+  try {
+    perfil = Object.keys(datos).length ? await db(repo.actualizarPerfil(uid, datos)) : actual;
+  } catch (err) {
+    // Sin cuentas inconsistentes: si falla Firestore, el correo de Auth vuelve al anterior.
+    if (cambiaCorreo) await getAuthAdmin().updateUser(uid, { email: actual.correo }).catch((e) => console.error('No se pudo revertir el correo:', e));
+    throw err;
+  }
   return { uid, ...perfil, proveedores: await proveedoresDe(uid) };
 }
 

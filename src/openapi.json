@@ -197,7 +197,7 @@
         }
       },
       "patch": {
-        "summary": "Actualiza nombres, apellidos y/o foto (requiere username)",
+        "summary": "Actualiza nombres, apellidos, foto y/o correo (requiere username)",
         "tags": [
           "Usuarios"
         ],
@@ -223,6 +223,10 @@
                     "type": "string",
                     "nullable": true,
                     "description": "URL https, data URL png/jpeg/webp (≤100 KB) o null"
+                  },
+                  "correo": {
+                    "type": "string",
+                    "description": "Nuevo correo; cambia también el de inicio de sesión. Exige haber iniciado sesión en los últimos 5 minutos. Si es igual al actual se ignora."
                   }
                 }
               },
@@ -294,10 +298,7 @@
             }
           },
           "401": {
-            "$ref": "#/components/responses/Unauthenticated"
-          },
-          "409": {
-            "description": "Aún no eligió username",
+            "description": "Sin sesión (UNAUTHENTICATED) o, al cambiar el correo, inicio de sesión no reciente (REAUTH_REQUIRED)",
             "content": {
               "application/json": {
                 "schema": {
@@ -305,8 +306,26 @@
                 },
                 "example": {
                   "error": {
-                    "code": "PROFILE_INCOMPLETE",
-                    "message": "Primero elige tu username."
+                    "code": "REAUTH_REQUIRED",
+                    "message": "Por seguridad, vuelve a iniciar sesión para cambiar tu correo.",
+                    "campo": "correo"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Aún no eligió username (PROFILE_INCOMPLETE) o el correo ya está en otra cuenta (EMAIL_TAKEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "EMAIL_TAKEN",
+                    "message": "Ese correo ya está registrado en otra cuenta.",
+                    "campo": "correo"
                   }
                 }
               }
