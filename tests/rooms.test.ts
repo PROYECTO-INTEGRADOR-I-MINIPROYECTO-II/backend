@@ -60,4 +60,35 @@ describe.skipIf(!hayEmulador)('salas (emuladores)', () => {
     const restantes = await getDb().collection('rooms').where('uid', '==', localId).get();
     expect(restantes.empty).toBe(true);
   });
+
+  it('al eliminar la cuenta aplica la política: borra sus salas con mensajes y anonimiza los suyos en salas ajenas', async () => {
+    const a = await crearCuenta('ana@x.com');
+    const b = await crearCuenta('bea@x.com');
+    await request(app).put('/api/usuarios/yo/username').set(bearer(a.idToken)).send({ username: 'ana.p' }).expect(200);
+    await request(app).put('/api/usuarios/yo/username').set(bearer(b.idToken)).send({ username: 'bea.q' }).expect(200);
+    const salaA = (await request(app).post('/api/salas').set(bearer(a.idToken)).send({ nombre: 'De Ana' })).body.id;
+    const salaB = (await request(app).post('/api/salas').set(bearer(b.idToken)).send({ nombre: 'De Bea' })).body.id;
+
+    const msg = (sala: string, uid: string, autor: string, texto: string) =>
+      getDb().collection('rooms').doc(sala).collection('messages').add({ uid, autor, texto, creado: new Date().toISOString() });
+    await msg(salaA, a.localId, 'ana.p', 'a1');
+    await msg(salaA, b.localId, 'bea.q', 'b1');
+    await msg(salaB, a.localId, 'ana.p', 'a2');
+    await msg(salaB, b.localId, 'bea.q', 'b2');
+
+    await request(app).delete('/api/usuarios/yo').set(bearer(a.idToken)).expect(204);
+
+    expect((await getDb().collection('rooms').doc(salaA).get()).exists).toBe(false);
+    expect((await getDb().collection('rooms').doc(salaA).collection('messages').get()).empty).toBe(true);
+
+    const enB = (await getDb().collection('rooms').doc(salaB).collection('messages').get()).docs.map((d) => d.data());
+    const porTexto = Object.fromEntries(enB.map((m) => [m.texto, m]));
+    expect(porTexto.a2).toMatchObject({ uid: null, autor: 'Usuario eliminado' });
+    expect(porTexto.b2).toMatchObject({ uid: b.localId, autor: 'bea.q' });
+
+    expect((await request(app).get('/api/usernames/ana.p/disponible')).body).toEqual({ disponible: true });
+    const yoB = await request(app).get('/api/usuarios/yo').set(bearer(b.idToken));
+    expect(yoB.status).toBe(200);
+    expect(yoB.body.username).toBe('bea.q');
+  });
 });
