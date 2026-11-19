@@ -39,7 +39,7 @@ Política al eliminar la cuenta (sin datos huérfanos):
 2. Sus mensajes en salas de otras personas se conservan anonimizados: `uid: null` y `autor: 'Usuario eliminado'`.
 3. Se borran `users/{uid}`, `usernames/{username}` (el username queda libre) y el usuario de Firebase Auth.
 
-El orden es anonimizar → borrar salas → borrar perfil → borrar Auth; cada paso es idempotente, así que si falla a mitad basta reintentar. La anonimización consulta `messages` como collection group por `uid`, lo que requiere el índice de `firestore.indexes.json`.
+El orden es revocar sesiones y cortar sockets → borrar salas → anonimizar → borrar perfil → borrar Auth; cada paso es idempotente, así que si falla a mitad basta reintentar. La anonimización consulta `messages` como collection group por `uid`, lo que requiere el índice de `firestore.indexes.json`.
 
 ## Tiempo real (Socket.io)
 

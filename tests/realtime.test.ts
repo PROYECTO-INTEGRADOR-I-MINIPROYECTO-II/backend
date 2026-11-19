@@ -165,5 +165,6 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
     await request(app).delete('/api/usuarios/yo').set(bearer(ana.idToken)).expect(204);
     await cerrado;
     expect(ana.socket.connected).toBe(false);
+    expect((await rechazo(conectar(ana.idToken))).data?.code).toBe('UNAUTHENTICATED');
   });
 });

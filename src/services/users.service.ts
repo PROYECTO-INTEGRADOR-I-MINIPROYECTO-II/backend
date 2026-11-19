@@ -95,9 +95,11 @@ export async function actualizarYo(uid: string, body: Record<string, unknown> | 
 
 export async function eliminarYo(uid: string) {
   // Orden: lo que depende del uid primero y la cuenta al final; si falla a mitad, reintentar es seguro (cada paso es idempotente).
-  desconectarUsuario(uid); // sin socket abierto no puede seguir escribiendo mensajes con su uid
-  await db(roomsRepo.anonimizarMensajes(uid));
+  // Revocar antes de cortar: sin esto el cliente reconecta con el mismo token y escribe mensajes con su uid tras anonimizar.
+  await getAuthAdmin().revokeRefreshTokens(uid);
+  desconectarUsuario(uid);
   await db(roomsRepo.borrarSalasDePropietario(uid));
+  await db(roomsRepo.anonimizarMensajes(uid));
   await db(repo.borrarPerfil(uid));
   await getAuthAdmin().deleteUser(uid);
 }
