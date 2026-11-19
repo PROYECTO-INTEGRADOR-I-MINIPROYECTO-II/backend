@@ -27,7 +27,7 @@ router.get('/usernames/:username/disponible', async (req, res, next) => {
 
 router.use('/usuarios', requireAuth);
 router.get('/usuarios/yo', privada((a) => svc.getYo(a.uid, a.token)));
-router.patch('/usuarios/yo', privada((a, b) => svc.actualizarYo(a.uid, b)));
+router.patch('/usuarios/yo', privada((a, b) => svc.actualizarYo(a.uid, a.token, b)));
 router.put('/usuarios/yo/username', privada((a, b) => svc.ponerUsername(a.uid, a.token, b?.username)));
 router.delete('/usuarios/yo', privada((a) => svc.eliminarYo(a.uid)));
 router.delete('/usuarios/yo/proveedores/google', privada((a) => svc.desvincularGoogle(a.uid)));

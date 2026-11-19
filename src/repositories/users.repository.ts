@@ -42,7 +42,7 @@ export async function guardarUsername(uid: string, username: string, nuevo: Omit
   });
 }
 
-export async function actualizarPerfil(uid: string, datos: Partial<Pick<Perfil, 'nombres' | 'apellidos' | 'foto'>>): Promise<Perfil> {
+export async function actualizarPerfil(uid: string, datos: Partial<Pick<Perfil, 'nombres' | 'apellidos' | 'foto' | 'correo'>>): Promise<Perfil> {
   const ref = users().doc(uid);
   await ref.update(datos);
   return (await ref.get()).data() as Perfil;
