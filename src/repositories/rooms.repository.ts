@@ -43,3 +43,28 @@ export async function borrarSalasDePropietario(uid: string): Promise<void> {
     if (snapshot.size < tamanoLote) return;
   }
 }
+
+export async function getSala(id: string): Promise<Sala | null> {
+  const doc = await salas().doc(id).get();
+  return doc.exists ? { id: doc.id, ...(doc.data() as Omit<Sala, 'id'>) } : null;
+}
+
+export interface NuevoMensaje {
+  uid: string;
+  autor: string;
+  texto: string;
+}
+
+export interface Mensaje extends NuevoMensaje {
+  id: string;
+  salaId: string;
+  creado: string;
+}
+
+// rooms/{salaId}/messages/{auto}: esquema fijo { uid, autor, texto, creado (ISO) }.
+export async function guardarMensaje(salaId: string, datos: NuevoMensaje): Promise<Mensaje> {
+  const ref = salas().doc(salaId).collection('messages').doc();
+  const doc = { uid: datos.uid, autor: datos.autor, texto: datos.texto, creado: new Date().toISOString() };
+  await ref.create(doc);
+  return { id: ref.id, salaId, ...doc };
+}
