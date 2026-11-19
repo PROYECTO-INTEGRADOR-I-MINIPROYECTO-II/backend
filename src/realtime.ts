@@ -5,9 +5,10 @@ import { getSala, guardarMensaje } from './repositories/rooms.repository';
 import { getPerfil } from './repositories/users.repository';
 
 const MAX_TEXTO = 1000;
+const ID_SALA = /^[A-Za-z0-9]{1,128}$/;
 
 type Ack = (res: unknown) => void;
-type Datos = { uid: string; username: string };
+type Datos = { uid: string; username: string; salas: Set<string> };
 
 let io: Server | undefined;
 
@@ -18,6 +19,12 @@ const dbError = (err: unknown) => {
 };
 const responder = (ack: unknown, res: unknown) => {
   if (typeof ack === 'function') (ack as Ack)(res);
+};
+// Id de sala recortado y válido (solo alfanuméricos: evita rutas de Firestore con '/'), o null.
+const idSala = (p: unknown) => {
+  const id = objeto(p).id;
+  const limpio = typeof id === 'string' ? id.trim() : '';
+  return ID_SALA.test(limpio) ? limpio : null;
 };
 const objeto = (p: unknown): Record<string, unknown> => (p && typeof p === 'object' ? (p as Record<string, unknown>) : {});
 
@@ -37,16 +44,17 @@ const presencia = (salaId: string, excluir?: Socket) =>
   emitirPresencia(salaId, excluir).catch((err) => console.error('Error emitiendo presencia:', err));
 
 function conectar(socket: Socket) {
-  const { uid, username } = socket.data as Datos;
+  const { uid, username, salas } = socket.data as Datos;
 
   socket.on('sala:unirse', async (payload: unknown, ack: unknown) => {
-    const id = objeto(payload).id;
-    const limpio = typeof id === 'string' ? id.trim() : '';
-    if (!limpio) return responder(ack, error('VALIDATION_ERROR', 'Indica el ID de la sala.', 'id'));
+    const limpio = idSala(payload);
+    if (!limpio) return responder(ack, error('VALIDATION_ERROR', 'Indica un ID de sala válido.', 'id'));
     try {
       const sala = await getSala(limpio);
+      if (socket.disconnected) return;
       if (!sala) return responder(ack, error('NOT_FOUND', 'La sala no existe. Revisa el ID.'));
       await socket.join(limpio);
+      salas.add(limpio);
       responder(ack, { sala });
       await presencia(limpio);
     } catch (err) {
@@ -55,17 +63,23 @@ function conectar(socket: Socket) {
   });
 
   socket.on('sala:salir', async (payload: unknown, ack: unknown) => {
-    const id = objeto(payload).id;
-    const limpio = typeof id === 'string' ? id.trim() : '';
-    if (!limpio) return responder(ack, error('VALIDATION_ERROR', 'Indica el ID de la sala.', 'id'));
-    await socket.leave(limpio);
-    responder(ack, { ok: true });
-    await presencia(limpio);
+    const limpio = idSala(payload);
+    if (!limpio) return responder(ack, error('VALIDATION_ERROR', 'Indica un ID de sala válido.', 'id'));
+    try {
+      // Solo actúa sobre salas unidas: nunca sobre user:<uid> ni el room propio del socket.
+      if (salas.delete(limpio)) {
+        await socket.leave(limpio);
+        await presencia(limpio);
+      }
+      responder(ack, { ok: true });
+    } catch (err) {
+      responder(ack, dbError(err));
+    }
   });
 
   socket.on('mensaje:enviar', async (payload: unknown, ack: unknown) => {
     const { salaId, texto } = objeto(payload);
-    if (typeof salaId !== 'string' || !socket.rooms.has(salaId)) {
+    if (typeof salaId !== 'string' || !salas.has(salaId)) {
       return responder(ack, error('FORBIDDEN', 'Primero únete a la sala.'));
     }
     const limpio = typeof texto === 'string' ? texto.trim() : '';
@@ -73,6 +87,11 @@ function conectar(socket: Socket) {
       return responder(ack, error('VALIDATION_ERROR', `El mensaje debe tener entre 1 y ${MAX_TEXTO} caracteres.`, 'texto'));
     }
     try {
+      if (!(await getSala(salaId))) {
+        salas.delete(salaId);
+        await socket.leave(salaId);
+        return responder(ack, error('NOT_FOUND', 'La sala ya no existe.'));
+      }
       const mensaje = await guardarMensaje(salaId, { uid, autor: username, texto: limpio });
       io?.to(salaId).emit('mensaje:nuevo', mensaje);
       responder(ack, { mensaje });
@@ -82,13 +101,13 @@ function conectar(socket: Socket) {
   });
 
   socket.on('disconnecting', () => {
-    for (const sala of socket.rooms) if (sala !== socket.id && !sala.startsWith('user:')) void presencia(sala, socket);
+    for (const sala of salas) void presencia(sala, socket);
   });
 }
 
 export function iniciarTiempoReal(server: http.Server) {
   // Misma regla que app.ts: sin CORS_ORIGIN no se permite ningún origen.
-  io = new Server(server, { cors: { origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) ?? false } });
+  io = new Server(server, { maxHttpBufferSize: 16 * 1024, cors: { origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) ?? false } });
 
   io.use(async (socket, next) => {
     const token = (socket.handshake.auth as { token?: unknown } | undefined)?.token;
@@ -97,8 +116,8 @@ export function iniciarTiempoReal(server: http.Server) {
     try {
       const { uid } = await getAuthAdmin().verifyIdToken(token, true);
       const perfil = await getPerfil(uid);
-      if (!perfil) return fallo('PROFILE_INCOMPLETE', 'Primero elige tu username.');
-      socket.data = { uid, username: perfil.username } satisfies Datos;
+      if (!perfil?.username) return fallo('PROFILE_INCOMPLETE', 'Primero elige tu username.');
+      socket.data = { uid, username: perfil.username, salas: new Set<string>() } satisfies Datos;
       socket.join('user:' + uid);
       next();
     } catch (err) {

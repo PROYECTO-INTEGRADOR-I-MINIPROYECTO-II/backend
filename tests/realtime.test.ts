@@ -56,7 +56,7 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
   it('valida el ID al unirse y lo recorta', async () => {
     const ana = await usuario('ana@x.com', 'ana');
     const id = await crearSala(ana.idToken);
-    expect((await emitir(ana.socket, 'sala:unirse', { id: 'no-existe' })).error.code).toBe('NOT_FOUND');
+    expect((await emitir(ana.socket, 'sala:unirse', { id: 'noexiste' })).error.code).toBe('NOT_FOUND');
     expect((await emitir(ana.socket, 'sala:unirse', { id: '   ' })).error).toMatchObject({ code: 'VALIDATION_ERROR', campo: 'id' });
     expect((await emitir(ana.socket, 'sala:unirse', null)).error.code).toBe('VALIDATION_ERROR');
     expect((await emitir(ana.socket, 'sala:unirse', { id: `  ${id} ` })).sala.id).toBe(id);
@@ -101,6 +101,38 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
     const sala = await crearSala(ana.idToken);
     expect((await emitir(ana.socket, 'mensaje:enviar', { salaId: sala, texto: 'hola' })).error.code).toBe('FORBIDDEN');
     expect((await emitir(ana.socket, 'mensaje:enviar', null)).error.code).toBe('FORBIDDEN');
+    for (const salaId of [`user:${ana.uid}`, ana.socket.id]) {
+      expect((await emitir(ana.socket, 'mensaje:enviar', { salaId, texto: 'hola' })).error.code).toBe('FORBIDDEN');
+    }
+    const rooms = await getDb().collection('rooms').listDocuments();
+    expect(rooms.map((d) => d.id)).toEqual([sala]);
+    expect((await rooms[0].collection('messages').get()).empty).toBe(true);
+  });
+
+  it('si la sala se borró, el envío da NOT_FOUND y no escribe', async () => {
+    const ana = await usuario('ana@x.com', 'ana');
+    const sala = await crearSala(ana.idToken);
+    await emitir(ana.socket, 'sala:unirse', { id: sala });
+    await getDb().recursiveDelete(getDb().collection('rooms').doc(sala));
+    expect((await emitir(ana.socket, 'mensaje:enviar', { salaId: sala, texto: 'hola' })).error.code).toBe('NOT_FOUND');
+    expect((await getDb().collection('rooms').doc(sala).collection('messages').get()).empty).toBe(true);
+    expect((await emitir(ana.socket, 'mensaje:enviar', { salaId: sala, texto: 'hola' })).error.code).toBe('FORBIDDEN');
+  });
+
+  it('rechaza IDs con caracteres no válidos', async () => {
+    const ana = await usuario('ana@x.com', 'ana');
+    for (const id of ['a/messages/m', 'user:x', 'a'.repeat(129)]) {
+      expect((await emitir(ana.socket, 'sala:unirse', { id })).error).toMatchObject({ code: 'VALIDATION_ERROR', campo: 'id' });
+    }
+  });
+
+  it('sala:salir no saca de la sala privada: desconectarUsuario sigue funcionando', async () => {
+    const ana = await usuario('ana@x.com', 'ana');
+    await emitir(ana.socket, 'sala:salir', { id: `user:${ana.uid}` });
+    const cerrado = new Promise((ok) => ana.socket.on('disconnect', ok));
+    desconectarUsuario(ana.uid);
+    await cerrado;
+    expect(ana.socket.connected).toBe(false);
   });
 
   it('emite la presencia al unirse y al salir', async () => {
