@@ -3,6 +3,7 @@ import { getAuthAdmin } from '../config/firebase';
 import { AppError } from '../errors';
 import * as repo from '../repositories/users.repository';
 import * as roomsRepo from '../repositories/rooms.repository';
+import { desconectarUsuario } from '../realtime';
 import { Perfil } from '../repositories/users.repository';
 import { analizarNombre, fotoValida, NOMBRE_MAX_TOTAL, validarUsername } from '../validaciones';
 
@@ -94,6 +95,7 @@ export async function actualizarYo(uid: string, body: Record<string, unknown> | 
 
 export async function eliminarYo(uid: string) {
   // Orden: lo que depende del uid primero y la cuenta al final; si falla a mitad, reintentar es seguro (cada paso es idempotente).
+  desconectarUsuario(uid); // sin socket abierto no puede seguir escribiendo mensajes con su uid
   await db(roomsRepo.anonimizarMensajes(uid));
   await db(roomsRepo.borrarSalasDePropietario(uid));
   await db(repo.borrarPerfil(uid));

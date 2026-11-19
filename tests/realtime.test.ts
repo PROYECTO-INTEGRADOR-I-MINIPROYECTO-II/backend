@@ -158,4 +158,12 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
     await cerrado;
     expect(ana.socket.connected).toBe(false);
   });
+
+  it('eliminar la cuenta corta sus sockets', async () => {
+    const ana = await usuario('ana@x.com', 'ana');
+    const cerrado = new Promise((ok) => ana.socket.on('disconnect', ok));
+    await request(app).delete('/api/usuarios/yo').set(bearer(ana.idToken)).expect(204);
+    await cerrado;
+    expect(ana.socket.connected).toBe(false);
+  });
 });
