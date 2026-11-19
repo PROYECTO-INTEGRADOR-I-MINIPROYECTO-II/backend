@@ -29,18 +29,21 @@ export async function listarSalas(uid: string): Promise<Sala[]> {
     .sort((a, b) => b.creado.localeCompare(a.creado) || a.id.localeCompare(b.id));
 }
 
+// Borra cada sala con su subcolección de mensajes (recursiveDelete), sin dejar huérfanos.
 export async function borrarSalasDePropietario(uid: string): Promise<void> {
-  const db = getDb();
-  const collection = salas();
-  const tamanoLote = 450;
+  const snapshot = await salas().where('uid', '==', uid).get();
+  for (const doc of snapshot.docs) await getDb().recursiveDelete(doc.ref);
+}
 
+// Los mensajes del usuario en salas ajenas se conservan anonimizados. Repite hasta vaciar la consulta.
+export async function anonimizarMensajes(uid: string): Promise<void> {
+  const tamanoLote = 450;
   while (true) {
-    const snapshot = await collection.where('uid', '==', uid).limit(tamanoLote).get();
+    const snapshot = await getDb().collectionGroup('messages').where('uid', '==', uid).limit(tamanoLote).get();
     if (snapshot.empty) return;
-    const batch = db.batch();
-    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    const batch = getDb().batch();
+    snapshot.docs.forEach((doc) => batch.update(doc.ref, { uid: null, autor: 'Usuario eliminado' }));
     await batch.commit();
-    if (snapshot.size < tamanoLote) return;
   }
 }
 
