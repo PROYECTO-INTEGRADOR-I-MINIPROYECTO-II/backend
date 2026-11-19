@@ -35,6 +35,38 @@ Errores: `{ "error": { "code", "message", "campo"? } }` (`campo` indica el campo
 
 Política al eliminar la cuenta: se borran las salas creadas por el usuario, `users`, `usernames` y el usuario de Firebase Auth. Las salas son privadas y solo aparecen en el listado de su propietario; el ID generado por Firestore identifica la sala.
 
+## Tiempo real (Socket.io)
+
+Mismo servicio y puerto que la API. El cliente se conecta con su ID token de Firebase:
+
+```js
+const socket = io(API_URL, { auth: { token } });
+```
+
+Si el token falta o es inválido, o el usuario aún no tiene username, el handshake falla: `connect_error` con `err.data = { code, message }` (`UNAUTHENTICATED`, `PROFILE_INCOMPLETE`, `AUTH_UNAVAILABLE`). Los handlers responden por ack `{ ... }` o `{ error: { code, message, campo? } }`.
+
+| Dirección | Evento | Payload | Respuesta / errores |
+|---|---|---|---|
+| cliente → servidor | `sala:unirse` | `{ id }` | ack `{ sala }`; `VALIDATION_ERROR` (campo `id`), `NOT_FOUND`, `DB_UNAVAILABLE` |
+| cliente → servidor | `sala:salir` | `{ id }` | ack `{ ok: true }` |
+| cliente → servidor | `mensaje:enviar` | `{ salaId, texto }` (1-1000 caracteres, recortado) | ack `{ mensaje }`; `FORBIDDEN` (no unido), `VALIDATION_ERROR` (campo `texto`), `DB_UNAVAILABLE` |
+| servidor → cliente | `mensaje:nuevo` | `{ id, salaId, uid, autor, texto, creado }` | a toda la sala (incluye al emisor) |
+| servidor → cliente | `sala:presencia` | `{ salaId, usuarios: [{ uid, username }] }` | al unirse, salir o desconectarse alguien |
+
+Los mensajes se guardan en `rooms/{salaId}/messages`.
+
+```mermaid
+erDiagram
+  users ||--|| usernames : "username en minúsculas"
+  users ||--o{ rooms : "crea (uid)"
+  rooms ||--o{ messages : contiene
+  users ||--o{ messages : "escribe (uid)"
+  users { string uid PK "doc id"; string username; string nombres; string apellidos; string foto; string correo; string creado }
+  usernames { string username PK "doc id"; string uid }
+  rooms { string id PK; string nombre; string descripcion; string uid; string creado }
+  messages { string id PK; string uid; string autor "username"; string texto; string creado "ISO" }
+```
+
 ## Correr local
 
 ```bash
