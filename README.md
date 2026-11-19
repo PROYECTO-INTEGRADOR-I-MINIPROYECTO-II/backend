@@ -18,7 +18,7 @@ Documentación Swagger: `/api/docs`.
 | POST | `/api/auth/registro` | Público. `{ nombres, apellidos, username, correo, clave, foto? }` -> `201` con el perfil; `400 VALIDATION_ERROR` (con `campo`), `409 EMAIL_TAKEN` / `USERNAME_TAKEN`. Si el username está ocupado se deshace la cuenta de Auth. Luego el cliente inicia sesión con Firebase |
 | GET | `/api/usernames/:username/disponible` | Público. `{ disponible }` (no distingue mayúsculas); `400 USERNAME_INVALID` |
 | GET | `/api/usuarios/yo` | Perfil de la sesión + `proveedores`. Sin perfil (Google nuevo): `username: null` con nombre/foto/correo del token |
-| PATCH | `/api/usuarios/yo` | `{ nombres, apellidos, foto, correo }` (cualquiera); `409 PROFILE_INCOMPLETE` si aún no tiene username. Cambiar `correo` exige sesión de menos de 5 min (`401 REAUTH_REQUIRED`) y falla con `409 EMAIL_TAKEN` si ya existe |
+| PATCH | `/api/usuarios/yo` | `{ nombres, apellidos, foto, correo }` (cualquiera); `409 PROFILE_INCOMPLETE` si aún no tiene username. Cambiar `correo` exige sesión de menos de 5 min (`401 REAUTH_REQUIRED`) y falla con `409 EMAIL_TAKEN` si ya existe. Tras cambiarlo, Firebase invalida los ID tokens anteriores: el cliente debe pedir uno nuevo (`getIdToken(true)`) o volver a iniciar sesión |
 | PUT | `/api/usuarios/yo/username` | `{ username }`: crea el perfil o cambia el username (libera el anterior); `409 USERNAME_TAKEN` |
 | DELETE | `/api/usuarios/yo` | Elimina la cuenta (`204`) |
 | DELETE | `/api/usuarios/yo/proveedores/google` | Desvincula Google (`204`); `409 LAST_PROVIDER` si no tiene contraseña |
