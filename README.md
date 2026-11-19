@@ -33,7 +33,13 @@ Errores: `{ "error": { "code", "message", "campo"? } }` (`campo` indica el campo
 
 `users/{uid}` y `usernames/{username en minúsculas}` se escriben siempre en la misma transacción. `firestore.rules` niega todo acceso directo: solo el backend lee/escribe.
 
-Política al eliminar la cuenta: se borran las salas creadas por el usuario, `users`, `usernames` y el usuario de Firebase Auth. Las salas son privadas y solo aparecen en el listado de su propietario; el ID generado por Firestore identifica la sala.
+Política al eliminar la cuenta (sin datos huérfanos):
+
+1. Las salas que el usuario creó se borran completas, junto con su subcolección `messages`.
+2. Sus mensajes en salas de otras personas se conservan anonimizados: `uid: null` y `autor: 'Usuario eliminado'`.
+3. Se borran `users/{uid}`, `usernames/{username}` (el username queda libre) y el usuario de Firebase Auth.
+
+El orden es anonimizar → borrar salas → borrar perfil → borrar Auth; cada paso es idempotente, así que si falla a mitad basta reintentar. La anonimización consulta `messages` como collection group por `uid`, lo que requiere el índice de `firestore.indexes.json`.
 
 ## Tiempo real (Socket.io)
 
@@ -134,6 +140,7 @@ El código nunca toca el Firebase real; esto lo hace una persona del equipo con 
 
 1. Consola de Firebase → Authentication → Sign-in method: habilitar **Correo/contraseña** y **Google**.
 2. Desplegar las reglas que niegan el acceso directo: `npx firebase deploy --only firestore:rules --project <id-del-proyecto-real>`.
+3. Desplegar el índice de collection group `messages.uid` (necesario para anonimizar mensajes al eliminar una cuenta): `npx firebase deploy --only firestore:indexes --project synk-mp2`.
 
 ## Estructura por capas
 
