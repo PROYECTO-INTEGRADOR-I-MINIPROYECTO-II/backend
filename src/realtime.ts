@@ -109,26 +109,31 @@ export function iniciarTiempoReal(server: http.Server) {
   // Misma regla que app.ts: sin CORS_ORIGIN no se permite ningún origen.
   io = new Server(server, { maxHttpBufferSize: 16 * 1024, cors: { origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) ?? false } });
 
-  io.use(async (socket, next) => {
-    const token = (socket.handshake.auth as { token?: unknown } | undefined)?.token;
-    const fallo = (code: string, message: string) => next(Object.assign(new Error(message), { data: { code, message } }));
-    if (typeof token !== 'string' || !token) return fallo('UNAUTHENTICATED', 'Inicia sesión para continuar.');
-    try {
-      const { uid } = await getAuthAdmin().verifyIdToken(token, true);
-      const perfil = await getPerfil(uid);
-      if (!perfil?.username) return fallo('PROFILE_INCOMPLETE', 'Primero elige tu username.');
-      socket.data = { uid, username: perfil.username, salas: new Set<string>() } satisfies Datos;
-      socket.join('user:' + uid);
-      next();
-    } catch (err) {
-      if (String((err as { code?: unknown }).code).startsWith('auth/')) return fallo('UNAUTHENTICATED', 'Inicia sesión para continuar.');
-      console.error('Error verificando el token del socket:', err);
-      fallo('AUTH_UNAVAILABLE', 'No pudimos verificar tu sesión. Intenta de nuevo en unos segundos.');
-    }
+  // io.use espera un callback síncrono: la promesa se maneja aquí.
+  io.use((socket, next) => {
+    autenticar(socket, next).catch(next);
   });
 
   io.on('connection', conectar);
   return io;
+}
+
+async function autenticar(socket: Socket, next: (err?: Error) => void) {
+  const token = (socket.handshake.auth as { token?: unknown } | undefined)?.token;
+  const fallo = (code: string, message: string) => next(Object.assign(new Error(message), { data: { code, message } }));
+  if (typeof token !== 'string' || !token) return fallo('UNAUTHENTICATED', 'Inicia sesión para continuar.');
+  try {
+    const { uid } = await getAuthAdmin().verifyIdToken(token, true);
+    const perfil = await getPerfil(uid);
+    if (!perfil?.username) return fallo('PROFILE_INCOMPLETE', 'Primero elige tu username.');
+    socket.data = { uid, username: perfil.username, salas: new Set<string>() } satisfies Datos;
+    await socket.join('user:' + uid);
+    next();
+  } catch (err) {
+    if (String((err as { code?: unknown }).code).startsWith('auth/')) return fallo('UNAUTHENTICATED', 'Inicia sesión para continuar.');
+    console.error('Error verificando el token del socket:', err);
+    fallo('AUTH_UNAVAILABLE', 'No pudimos verificar tu sesión. Intenta de nuevo en unos segundos.');
+  }
 }
 
 // Corta las conexiones de un usuario (p. ej. al eliminar su cuenta).
