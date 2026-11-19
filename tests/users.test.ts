@@ -1,6 +1,6 @@
 import { getAuth } from 'firebase-admin/auth';
 import request from 'supertest';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import app from '../src/app';
 import { getAuthAdmin, getDb } from '../src/config/firebase';
 import { crearCuenta, crearCuentaGoogle, hayEmulador, limpiar } from './emulador';
@@ -82,6 +82,63 @@ describe.skipIf(!hayEmulador)('usuarios (emuladores)', () => {
       expect(mal.body.error).toMatchObject({ code: 'VALIDATION_ERROR', campo: 'foto' });
       const vacio = await request(app).patch('/api/usuarios/yo').set(bearer(idToken)).send({ nombres: '<b>' });
       expect(vacio.body.error.campo).toBe('nombres');
+    });
+
+    describe('PATCH correo', () => {
+      const preparar = async (correo = 'a@x.com') => {
+        const cuenta = await crearCuenta(correo);
+        await request(app).put('/api/usuarios/yo/username').set(bearer(cuenta.idToken)).send({ username: 'ana' });
+        return { ...cuenta, patch: (b: object) => request(app).patch('/api/usuarios/yo').set(bearer(cuenta.idToken)).send(b) };
+      };
+
+      it('cambio exitoso actualiza Auth y perfil', async () => {
+        const { localId, patch } = await preparar();
+        const res = await patch({ correo: ' Nuevo@x.com ' });
+        expect(res.status).toBe(200);
+        expect(res.body.correo).toBe('Nuevo@x.com');
+        expect((await getAuthAdmin().getUser(localId)).email).toBe('nuevo@x.com');
+        expect((await getDb().collection('users').doc(localId).get()).get('correo')).toBe('Nuevo@x.com');
+      });
+
+      it('correo de otra cuenta -> 409 EMAIL_TAKEN y nada cambia', async () => {
+        await crearCuenta('b@x.com');
+        const { localId, patch } = await preparar();
+        const res = await patch({ correo: 'B@x.com' });
+        expect(res.status).toBe(409);
+        expect(res.body.error).toMatchObject({ code: 'EMAIL_TAKEN', campo: 'correo' });
+        expect((await getAuthAdmin().getUser(localId)).email).toBe('a@x.com');
+        expect((await getDb().collection('users').doc(localId).get()).get('correo')).toBe('a@x.com');
+      });
+
+      it('formato inválido -> 400 con campo', async () => {
+        const { patch } = await preparar();
+        const res = await patch({ correo: 'no-es-correo' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatchObject({ code: 'VALIDATION_ERROR', campo: 'correo' });
+        expect((await patch({ correo: null })).body.error.campo).toBe('correo');
+      });
+
+      it('inicio de sesión viejo -> 401 REAUTH_REQUIRED', async () => {
+        const { idToken, localId, patch } = await preparar();
+        const real = await getAuthAdmin().verifyIdToken(idToken);
+        vi.spyOn(getAuthAdmin(), 'verifyIdToken').mockResolvedValue({ ...real, auth_time: real.auth_time - 10 * 60 });
+        const res = await patch({ correo: 'nuevo@x.com' });
+        vi.restoreAllMocks();
+        expect(res.status).toBe(401);
+        expect(res.body.error).toMatchObject({ code: 'REAUTH_REQUIRED', campo: 'correo' });
+        expect((await getAuthAdmin().getUser(localId)).email).toBe('a@x.com');
+      });
+
+      it('mismo correo (sin distinguir mayúsculas) -> 200 sin reautenticar ni cambios', async () => {
+        const { idToken, localId, patch } = await preparar();
+        const real = await getAuthAdmin().verifyIdToken(idToken);
+        vi.spyOn(getAuthAdmin(), 'verifyIdToken').mockResolvedValue({ ...real, auth_time: real.auth_time - 10 * 60 });
+        const res = await patch({ correo: ' A@X.com ' });
+        vi.restoreAllMocks();
+        expect(res.status).toBe(200);
+        expect(res.body.correo).toBe('a@x.com');
+        expect((await getAuthAdmin().getUser(localId)).email).toBe('a@x.com');
+      });
     });
 
     it('PATCH con null: nombres/apellidos -> 400, foto null la quita', async () => {
