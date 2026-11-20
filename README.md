@@ -53,11 +53,11 @@ Si el token falta o es inválido, o el usuario aún no tiene username, el handsh
 
 | Dirección | Evento | Payload | Respuesta / errores |
 |---|---|---|---|
-| cliente → servidor | `sala:unirse` | `{ id }` | ack `{ sala }`; `VALIDATION_ERROR` (campo `id`), `NOT_FOUND`, `DB_UNAVAILABLE` |
+| cliente → servidor | `sala:unirse` | `{ id }` | ack `{ sala, rol }` (`rol`: `anfitrion` o `participante`); `VALIDATION_ERROR` (campo `id`), `NOT_FOUND`, `DB_UNAVAILABLE` |
 | cliente → servidor | `sala:salir` | `{ id }` | ack `{ ok: true }` |
 | cliente → servidor | `mensaje:enviar` | `{ salaId, texto }` (1-1000 caracteres, recortado) | ack `{ mensaje }`; `FORBIDDEN` (no unido), `VALIDATION_ERROR` (campo `texto`), `DB_UNAVAILABLE` |
 | servidor → cliente | `mensaje:nuevo` | `{ id, salaId, uid, autor, texto, creado }` | a toda la sala (incluye al emisor) |
-| servidor → cliente | `sala:presencia` | `{ salaId, usuarios: [{ uid, username }] }` | al unirse, salir o desconectarse alguien |
+| servidor → cliente | `sala:presencia` | `{ salaId, usuarios: [{ uid, username, nombre, foto }] }` | al unirse, salir o desconectarse alguien |
 
 Los mensajes se guardan en `rooms/{salaId}/messages`.
 
@@ -70,7 +70,7 @@ erDiagram
   users { string uid PK "doc id"; string username; string nombres; string apellidos; string foto; string correo; string creado }
   usernames { string username PK "doc id"; string uid }
   rooms { string id PK; string nombre; string descripcion; string uid; string creado }
-  messages { string id PK; string uid; string autor "username"; string texto; string creado "ISO" }
+  messages { string id PK; string uid; string autor "nombre al enviar"; string texto; string creado "ISO" }
 ```
 
 ## Correr local
