@@ -1,24 +1,25 @@
-import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import request from 'supertest';
 import { io as cliente, type Socket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import app from '../src/app';
 import { getDb } from '../src/config/firebase';
-import { desconectarUsuario, iniciarTiempoReal } from '../src/realtime';
+import { desconectarUsuario } from '../src/realtime';
+import { crearServidorTiempoReal } from '../src/tiempo-real';
 import { crearCuenta, hayEmulador, limpiar } from './emulador';
 
 const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
-  const server = http.createServer(app);
+  const server = crearServidorTiempoReal();
   let url = '';
   const abiertos: Socket[] = [];
 
   beforeAll(async () => {
-    iniciarTiempoReal(server);
+    process.env.INTERNO_TOKEN = 'secreto';
     await new Promise<void>((ok) => server.listen(0, ok));
     url = `http://localhost:${(server.address() as AddressInfo).port}`;
+    process.env.REALTIME_URL = url;
   });
   afterAll(() => new Promise<void>((ok) => { server.closeAllConnections(); server.close(() => ok()); }));
   beforeEach(limpiar);
@@ -166,5 +167,26 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
     await cerrado;
     expect(ana.socket.connected).toBe(false);
     expect((await rechazo(conectar(ana.idToken))).data?.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('/api/health responde 200', async () => {
+    expect((await fetch(`${url}/api/health`)).status).toBe(200);
+  });
+
+  it('el endpoint interno exige el token correcto', async () => {
+    const ana = await usuario('ana@x.com', 'ana');
+    const llamar = (headers: Record<string, string> = {}) => fetch(`${url}/interno/desconectar/${ana.uid}`, { method: 'POST', headers });
+    expect((await llamar()).status).toBe(401);
+    expect((await llamar({ 'x-interno': 'otro' })).status).toBe(401);
+    await pausa(100);
+    expect(ana.socket.connected).toBe(true);
+    const cerrado = new Promise((ok) => ana.socket.on('disconnect', ok));
+    expect((await llamar({ 'x-interno': 'secreto' })).status).toBe(204);
+    await cerrado;
+    expect(ana.socket.connected).toBe(false);
+  });
+
+  it('rutas desconocidas dan 404', async () => {
+    expect((await fetch(`${url}/otra`)).status).toBe(404);
   });
 });

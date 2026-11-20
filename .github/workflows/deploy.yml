@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+      RENDER_DEPLOY_HOOK_RT: ${{ secrets.RENDER_DEPLOY_HOOK_RT }}
       SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       - uses: actions/checkout@v5
@@ -44,3 +45,8 @@ jobs:
         run: |
           img=$(printf '%s' "${IMAGE}:${SHA}" | jq -sRr @uri)
           curl -fsS "${RENDER_DEPLOY_HOOK}&imgURL=${img}"
+      - name: Deploy en Render (tiempo real)
+        if: env.RENDER_DEPLOY_HOOK_RT != ''
+        run: |
+          img=$(printf '%s' "${IMAGE}:${SHA}" | jq -sRr @uri)
+          curl -fsS "${RENDER_DEPLOY_HOOK_RT}&imgURL=${img}"

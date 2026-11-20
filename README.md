@@ -43,7 +43,7 @@ El orden es revocar sesiones y cortar sockets → borrar salas → anonimizar �
 
 ## Tiempo real (Socket.io)
 
-Mismo servicio y puerto que la API. El cliente se conecta con su ID token de Firebase:
+Servicio aparte de la API (ver más abajo), con su propio puerto. El cliente se conecta con su ID token de Firebase:
 
 ```js
 const socket = io(API_URL, { auth: { token } });
@@ -142,11 +142,19 @@ El código nunca toca el Firebase real; esto lo hace una persona del equipo con 
 2. Desplegar las reglas que niegan el acceso directo: `npx firebase deploy --only firestore:rules --project <id-del-proyecto-real>`.
 3. Desplegar el índice de collection group `messages.uid` (necesario para anonimizar mensajes al eliminar una cuenta): `npx firebase deploy --only firestore:indexes --project synk-mp2`.
 
+## Servicios: API y tiempo real
+
+Son dos procesos de la misma imagen: la API (`node dist/index.js`) y el tiempo real (`node dist/tiempo-real.js`, socket.io).
+
+- Render: segundo web service con la misma imagen y Docker command `node dist/tiempo-real.js`. Variables: `FIREBASE_SERVICE_ACCOUNT`, `CORS_ORIGIN`, `INTERNO_TOKEN`. En la API, además: `REALTIME_URL` (URL del tiempo real) e `INTERNO_TOKEN` (el mismo valor). El deploy usa el secret `RENDER_DEPLOY_HOOK_RT` (opcional).
+- Local: `npm run dev` (API, 3000) y `npm run dev:rt` (tiempo real, 3001). El socket del frontend apunta a la URL del tiempo real.
+
 ## Estructura por capas
 
 ```
 src/
-  index.ts                 arranque
+  index.ts                 arranque de la API
+  tiempo-real.ts           arranque del servicio de tiempo real
   app.ts                   express, cors, swagger, errores
   errors.ts                AppError (con campo opcional)
   validaciones.ts          reglas de username, nombre, correo y clave (copia del frontend)
