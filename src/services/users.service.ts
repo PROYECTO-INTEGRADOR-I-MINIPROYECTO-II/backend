@@ -137,7 +137,7 @@ async function desconectarEnTiempoReal(uid: string) {
     avisoSinTiempoReal = true;
     return;
   }
-  const falla = new AppError(502, 'REALTIME_UNAVAILABLE', 'No pudimos cerrar tus sesiones abiertas. Intenta de nuevo en unos segundos.');
+  const falla = new AppError(502, 'REALTIME_UNAVAILABLE', 'No pudimos cerrar tus sesiones abiertas y tu cuenta no se eliminó. Inicia sesión de nuevo e inténtalo en unos segundos.');
   let res: Response;
   try {
     res = await fetch(`${REALTIME_URL}/interno/desconectar/${encodeURIComponent(uid)}`, {
