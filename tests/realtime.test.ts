@@ -6,7 +6,7 @@ import app from '../src/app';
 import { getAuthAdmin, getDb } from '../src/config/firebase';
 import { desconectarUsuario } from '../src/realtime';
 import { crearServidorTiempoReal } from '../src/tiempo-real';
-import { crearCuenta, hayEmulador, iniciarSesion, limpiar } from './emulador';
+import { crearCuenta, hayEmulador, limpiar } from './emulador';
 
 const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
 
@@ -207,9 +207,8 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
       process.env.REALTIME_URL = guardado;
     }
     expect((await getAuthAdmin().getUser(ana.uid)).uid).toBe(ana.uid);
-    // Las sesiones ya quedaron revocadas: para reintentar hay que volver a iniciar sesión.
-    const { idToken } = await iniciarSesion('ana@x.com', 'clave-segura-1');
-    await request(app).delete('/api/usuarios/yo').set(bearer(idToken)).expect(204);
+    // La sesión no se revocó: el mismo token sirve para reintentar.
+    await request(app).delete('/api/usuarios/yo').set(bearer(ana.idToken)).expect(204);
   });
 
   it('rutas desconocidas dan 404', async () => {

@@ -137,7 +137,7 @@ async function desconectarEnTiempoReal(uid: string) {
     avisoSinTiempoReal = true;
     return;
   }
-  const falla = new AppError(502, 'REALTIME_UNAVAILABLE', 'No pudimos cerrar tus sesiones abiertas y tu cuenta no se eliminó. Inicia sesión de nuevo e inténtalo en unos segundos.');
+  const falla = new AppError(502, 'REALTIME_UNAVAILABLE', 'No pudimos cerrar tus sesiones abiertas y tu cuenta no se eliminó. Intenta de nuevo en unos segundos.');
   let res: Response;
   try {
     res = await fetch(`${REALTIME_URL}/interno/desconectar/${encodeURIComponent(uid)}`, {
@@ -157,7 +157,9 @@ async function desconectarEnTiempoReal(uid: string) {
 
 export async function eliminarYo(uid: string) {
   // Orden: lo que depende del uid primero y la cuenta al final; si falla a mitad, reintentar es seguro (cada paso es idempotente).
-  // Revocar antes de cortar: sin esto el cliente reconecta con el mismo token y escribe mensajes con su uid tras anonimizar.
+  // Cortar, revocar y volver a cortar: si el tiempo real falla, la sesión sigue viva para reintentar; y un socket que
+  // reconecte entre el primer corte y la revocación (con el token aún válido) cae en el segundo corte.
+  await desconectarEnTiempoReal(uid);
   await getAuthAdmin().revokeRefreshTokens(uid);
   await desconectarEnTiempoReal(uid);
   await db(roomsRepo.borrarSalasDePropietario(uid));
