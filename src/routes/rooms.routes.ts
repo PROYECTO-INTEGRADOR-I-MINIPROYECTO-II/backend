@@ -6,6 +6,7 @@ const router = Router();
 
 router.use(requireAuth);
 
+//Listado de rutas creadas
 router.get('/salas', async (_req, res, next) => {
   try {
     const { uid } = res.locals as AuthLocals;
@@ -15,6 +16,7 @@ router.get('/salas', async (_req, res, next) => {
   }
 });
 
+//Creación de nuevas rutas
 router.post('/salas', async (req, res, next) => {
   try {
     const { uid } = res.locals as AuthLocals;

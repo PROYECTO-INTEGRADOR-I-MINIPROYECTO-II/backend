@@ -29,6 +29,8 @@ router.use('/usuarios', requireAuth);
 router.get('/usuarios/yo', privada((a) => svc.getYo(a.uid, a.token)));
 router.patch('/usuarios/yo', privada((a, b) => svc.actualizarYo(a.uid, b)));
 router.put('/usuarios/yo/username', privada((a, b) => svc.ponerUsername(a.uid, a.token, b?.username)));
+
+//Eliminación de usuario y desvinculación de Google
 router.delete('/usuarios/yo', privada((a) => svc.eliminarYo(a.uid)));
 router.delete('/usuarios/yo/proveedores/google', privada((a) => svc.desvincularGoogle(a.uid)));
 
