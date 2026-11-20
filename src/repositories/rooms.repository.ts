@@ -71,3 +71,11 @@ export async function guardarMensaje(salaId: string, datos: NuevoMensaje): Promi
   await ref.create(doc);
   return { id: ref.id, salaId, ...doc };
 }
+
+export async function listarMensajes(salaId: string, antes?: string, limite = 50): Promise<Mensaje[]> {
+  // shortcut: mensajes con el mismo ms en el borde de página se paginan solo por creado; añadir id como desempate si pasa.
+  let consulta = salas().doc(salaId).collection('messages').orderBy('creado', 'desc');
+  if (antes) consulta = consulta.where('creado', '<', antes);
+  const snapshot = await consulta.limit(limite).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, salaId, ...(doc.data() as Omit<Mensaje, 'id' | 'salaId'>) })).reverse();
+}

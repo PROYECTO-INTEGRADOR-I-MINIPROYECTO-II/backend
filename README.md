@@ -24,6 +24,8 @@ Documentación Swagger: `/api/docs`.
 | DELETE | `/api/usuarios/yo/proveedores/google` | Desvincula Google (`204`); `409 LAST_PROVIDER` si no tiene contraseña |
 | POST | `/api/salas` | Crea una sala privada `{ nombre, descripcion? }` (`201`); el servidor asigna el ID y propietario |
 | GET | `/api/salas` | Lista las salas privadas creadas por la sesión (`{ salas }`) |
+| GET | `/api/salas/:id` | Consulta una sala por ID con el rol de la sesión (`rol`: `anfitrion` o `participante`); `404` si no existe |
+| GET | `/api/salas/:id/mensajes?antes=` | Historial por partes de 50, de antiguo a reciente (`{ mensajes, hayMas }`); `antes` es una fecha ISO (el `creado` del primer mensaje recibido) |
 
 Las rutas `/api/usuarios/**` exigen `Authorization: Bearer <ID token de Firebase>`; sin token, inválido, vencido o revocado: `401 UNAUTHENTICATED`. El login lo hace Firebase en el cliente; `GET /api/usuarios/yo` sirve para comprobar la sesión.
 
@@ -53,7 +55,7 @@ Si el token falta o es inválido, o el usuario aún no tiene username, el handsh
 
 | Dirección | Evento | Payload | Respuesta / errores |
 |---|---|---|---|
-| cliente → servidor | `sala:unirse` | `{ id }` | ack `{ sala, rol }` (`rol`: `anfitrion` o `participante`); `VALIDATION_ERROR` (campo `id`), `NOT_FOUND`, `DB_UNAVAILABLE` |
+| cliente → servidor | `sala:unirse` | `{ id }` | ack `{ sala, rol, mensajes, hayMas }` (`rol`: `anfitrion` o `participante`; `mensajes`: los últimos 50, de antiguo a reciente; más con `GET /api/salas/:id/mensajes?antes=<creado>`); `VALIDATION_ERROR` (campo `id`), `NOT_FOUND`, `DB_UNAVAILABLE` |
 | cliente → servidor | `sala:salir` | `{ id }` | ack `{ ok: true }` |
 | cliente → servidor | `mensaje:enviar` | `{ salaId, texto }` (1-1000 caracteres, recortado) | ack `{ mensaje }`; `FORBIDDEN` (no unido), `VALIDATION_ERROR` (campo `texto`), `DB_UNAVAILABLE` |
 | servidor → cliente | `mensaje:nuevo` | `{ id, salaId, uid, autor, texto, creado }` | a toda la sala (incluye al emisor) |

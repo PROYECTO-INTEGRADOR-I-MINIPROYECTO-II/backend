@@ -146,6 +146,18 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
     expect((await emitir(bea.socket, 'sala:unirse', { id: sala })).rol).toBe('participante');
   });
 
+  it('el ack de sala:unirse incluye el historial', async () => {
+    const ana = await usuario('ana@x.com', 'ana');
+    const bea = await usuario('bea@x.com', 'bea');
+    const sala = await crearSala(ana.idToken);
+    const vacio = await emitir(ana.socket, 'sala:unirse', { id: sala });
+    expect(vacio).toMatchObject({ mensajes: [], hayMas: false });
+    const { mensaje } = await emitir(ana.socket, 'mensaje:enviar', { salaId: sala, texto: 'hola' });
+    const ack = await emitir(bea.socket, 'sala:unirse', { id: sala });
+    expect(ack.mensajes).toEqual([mensaje]);
+    expect(ack.hayMas).toBe(false);
+  });
+
   it('emite la presencia al unirse y al salir', async () => {
     const ana = await usuario('ana@x.com', 'ana');
     const bea = await usuario('bea@x.com', 'bea');

@@ -893,6 +893,121 @@
           }
         }
       }
+    },
+    "/api/salas/{id}/mensajes": {
+      "get": {
+        "summary": "Historial de mensajes de una sala por partes de 50 (de más antiguo a más reciente)",
+        "tags": [
+          "Salas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,128}$"
+            },
+            "example": "nP8dK1zX4qWm7R2s9aBc"
+          },
+          {
+            "name": "antes",
+            "in": "query",
+            "required": false,
+            "description": "Fecha ISO: solo mensajes anteriores a ella (use el creado del primer mensaje recibido)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2026-01-01T00:00:00.000Z"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hasta 50 mensajes; hayMas es true si puede haber más antiguos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "mensajes",
+                    "hayMas"
+                  ],
+                  "properties": {
+                    "mensajes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Mensaje"
+                      }
+                    },
+                    "hayMas": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "mensajes": [
+                    {
+                      "id": "m1",
+                      "salaId": "nP8dK1zX4qWm7R2s9aBc",
+                      "uid": "abc123",
+                      "autor": "Ana Pérez",
+                      "texto": "Hola",
+                      "creado": "2026-01-01T00:00:00.000Z"
+                    }
+                  ],
+                  "hayMas": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ID de sala o fecha `antes` inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Indica una fecha ISO válida.",
+                    "campo": "antes"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "La sala no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "La sala no existe. Revisa el ID."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -984,6 +1099,41 @@
               "type": "string",
               "format": "date-time"
             }
+          }
+        }
+      },
+      "Mensaje": {
+        "type": "object",
+        "required": [
+          "id",
+          "salaId",
+          "uid",
+          "autor",
+          "texto",
+          "creado"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "salaId": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string",
+            "nullable": true,
+            "description": "null si el autor eliminó su cuenta."
+          },
+          "autor": {
+            "type": "string",
+            "description": "'Usuario eliminado' si el autor eliminó su cuenta."
+          },
+          "texto": {
+            "type": "string"
+          },
+          "creado": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

@@ -2,6 +2,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import app from '../src/app';
 import { getDb } from '../src/config/firebase';
+import { anonimizarMensajes, guardarMensaje } from '../src/repositories/rooms.repository';
 import { crearCuenta, hayEmulador, limpiar } from './emulador';
 
 const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
@@ -112,5 +113,83 @@ describe.skipIf(!hayEmulador)('salas (emuladores)', () => {
     const yoB = await request(app).get('/api/usuarios/yo').set(bearer(b.idToken));
     expect(yoB.status).toBe(200);
     expect(yoB.body.username).toBe('bea.q');
+  });
+
+  describe('historial de mensajes', () => {
+    const nuevaSala = async (token: string) =>
+      (await request(app).post('/api/salas').set(bearer(token)).send({ nombre: 'Estudio' }).expect(201)).body.id as string;
+    const insertar = async (sala: string, n: number) => {
+      const col = getDb().collection('rooms').doc(sala).collection('messages');
+      for (let i = 0; i < n; i++) {
+        await col.add({ uid: 'u', autor: 'Ana', texto: `m${i}`, creado: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() });
+      }
+    };
+
+    it('con menos de 50 mensajes devuelve todos de antiguo a reciente', async () => {
+      const { idToken } = await crearCuenta('ana@x.com');
+      const sala = await nuevaSala(idToken);
+      await insertar(sala, 3);
+      const res = await request(app).get(`/api/salas/${sala}/mensajes`).set(bearer(idToken));
+      expect(res.status).toBe(200);
+      expect(res.body.mensajes.map((m: { texto: string }) => m.texto)).toEqual(['m0', 'm1', 'm2']);
+      expect(res.body.mensajes[0]).toMatchObject({ salaId: sala, autor: 'Ana' });
+      expect(res.body.hayMas).toBe(false);
+    });
+
+    it('pagina con antes: 51 mensajes dan los 50 más recientes y luego el más antiguo', async () => {
+      const { idToken } = await crearCuenta('ana@x.com');
+      const sala = await nuevaSala(idToken);
+      await insertar(sala, 51);
+      const pagina = (await request(app).get(`/api/salas/${sala}/mensajes`).set(bearer(idToken))).body;
+      expect(pagina.mensajes).toHaveLength(50);
+      expect(pagina.mensajes[0].texto).toBe('m1');
+      expect(pagina.mensajes[49].texto).toBe('m50');
+      expect(pagina.hayMas).toBe(true);
+      const resto = (await request(app).get(`/api/salas/${sala}/mensajes`).query({ antes: pagina.mensajes[0].creado }).set(bearer(idToken))).body;
+      expect(resto.mensajes.map((m: { texto: string }) => m.texto)).toEqual(['m0']);
+      expect(resto.hayMas).toBe(false);
+    });
+
+    it('con exactamente 50 mensajes hayMas es false', async () => {
+      const { idToken } = await crearCuenta('ana@x.com');
+      const sala = await nuevaSala(idToken);
+      await insertar(sala, 50);
+      const res = (await request(app).get(`/api/salas/${sala}/mensajes`).set(bearer(idToken))).body;
+      expect(res.mensajes).toHaveLength(50);
+      expect(res.hayMas).toBe(false);
+    });
+
+    it('antes sin milisegundos equivale al ISO canónico', async () => {
+      const { idToken } = await crearCuenta('ana@x.com');
+      const sala = await nuevaSala(idToken);
+      await insertar(sala, 8);
+      const pedir = (antes: string) => request(app).get(`/api/salas/${sala}/mensajes`).query({ antes }).set(bearer(idToken));
+      const sinMs = await pedir('2026-01-01T00:00:05Z');
+      expect(sinMs.status).toBe(200);
+      expect(sinMs.body.mensajes.map((m: { texto: string }) => m.texto)).toEqual(['m0', 'm1', 'm2', 'm3', 'm4']);
+      expect(sinMs.body).toEqual((await pedir('2026-01-01T00:00:05.000Z')).body);
+    });
+
+    it('muestra "Usuario eliminado" en mensajes anonimizados', async () => {
+      const { idToken } = await crearCuenta('ana@x.com');
+      const sala = await nuevaSala(idToken);
+      await guardarMensaje(sala, { uid: 'ajeno', autor: 'Bea Gómez', texto: 'hola' });
+      await anonimizarMensajes('ajeno');
+      const { mensajes } = (await request(app).get(`/api/salas/${sala}/mensajes`).set(bearer(idToken))).body;
+      expect(mensajes[0]).toMatchObject({ autor: 'Usuario eliminado', uid: null });
+    });
+
+    it('responde 400, 404 y 401', async () => {
+      const { idToken } = await crearCuenta('ana@x.com');
+      const sala = await nuevaSala(idToken);
+      const malaFecha = await request(app).get(`/api/salas/${sala}/mensajes?antes=ayer`).set(bearer(idToken));
+      expect(malaFecha.status).toBe(400);
+      expect(malaFecha.body.error).toMatchObject({ code: 'VALIDATION_ERROR', campo: 'antes' });
+      expect((await request(app).get('/api/salas/a.b/mensajes').set(bearer(idToken))).body.error.campo).toBe('id');
+      const noExiste = await request(app).get('/api/salas/noexiste/mensajes').set(bearer(idToken));
+      expect(noExiste.status).toBe(404);
+      expect(noExiste.body.error.message).toBe('La sala no existe. Revisa el ID.');
+      await request(app).get(`/api/salas/${sala}/mensajes`).expect(401);
+    });
   });
 });
