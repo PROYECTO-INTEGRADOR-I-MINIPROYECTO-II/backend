@@ -38,7 +38,9 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
   async function usuario(correo: string, username: string) {
     const { idToken, localId } = await crearCuenta(correo);
     await request(app).put('/api/usuarios/yo/username').set(bearer(idToken)).send({ username }).expect(200);
-    return { idToken, uid: localId, socket: await conectado(conectar(idToken)) };
+    const { nombres, apellidos } = (await request(app).get('/api/usuarios/yo').set(bearer(idToken)).expect(200)).body;
+    const nombre = `${nombres} ${apellidos}`.trim() || username;
+    return { idToken, uid: localId, nombre, socket: await conectado(conectar(idToken)) };
   }
   const crearSala = async (token: string) =>
     (await request(app).post('/api/salas').set(bearer(token)).send({ nombre: 'Estudio' }).expect(201)).body.id as string;
@@ -76,14 +78,14 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
     cai.socket.on('mensaje:nuevo', () => (fuera = true));
     const recibido = siguiente(bea.socket, 'mensaje:nuevo');
     const ack = await emitir(ana.socket, 'mensaje:enviar', { salaId: sala, texto: '  hola  ' });
-    expect(ack.mensaje).toMatchObject({ salaId: sala, uid: ana.uid, autor: 'ana', texto: 'hola' });
+    expect(ack.mensaje).toMatchObject({ salaId: sala, uid: ana.uid, autor: ana.nombre, texto: 'hola' });
     expect(await recibido).toEqual(ack.mensaje);
     await pausa();
     expect(fuera).toBe(false);
 
     const docs = await getDb().collection('rooms').doc(sala).collection('messages').get();
     expect(docs.size).toBe(1);
-    expect(docs.docs[0].data()).toEqual({ uid: ana.uid, autor: 'ana', texto: 'hola', creado: ack.mensaje.creado });
+    expect(docs.docs[0].data()).toEqual({ uid: ana.uid, autor: ana.nombre, texto: 'hola', creado: ack.mensaje.creado });
   });
 
   it('rechaza texto vacío o demasiado largo y no lo guarda', async () => {
@@ -135,6 +137,14 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
     expect(ana.socket.connected).toBe(false);
   });
 
+  it('el ack de unirse incluye el rol', async () => {
+    const ana = await usuario('ana@x.com', 'ana');
+    const bea = await usuario('bea@x.com', 'bea');
+    const sala = await crearSala(ana.idToken);
+    expect((await emitir(ana.socket, 'sala:unirse', { id: sala })).rol).toBe('anfitrion');
+    expect((await emitir(bea.socket, 'sala:unirse', { id: sala })).rol).toBe('participante');
+  });
+
   it('emite la presencia al unirse y al salir', async () => {
     const ana = await usuario('ana@x.com', 'ana');
     const bea = await usuario('bea@x.com', 'bea');
@@ -144,11 +154,16 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
     await emitir(bea.socket, 'sala:unirse', { id: sala });
     const { usuarios } = await lista;
     expect(usuarios).toHaveLength(2);
-    expect(usuarios).toEqual(expect.arrayContaining([{ uid: ana.uid, username: 'ana' }, { uid: bea.uid, username: 'bea' }]));
+    expect(usuarios).toEqual(
+      expect.arrayContaining([
+        { uid: ana.uid, username: 'ana', nombre: ana.nombre, foto: null },
+        { uid: bea.uid, username: 'bea', nombre: bea.nombre, foto: null },
+      ]),
+    );
 
     const tras = siguiente(ana.socket, 'sala:presencia');
     bea.socket.close();
-    expect((await tras).usuarios).toEqual([{ uid: ana.uid, username: 'ana' }]);
+    expect((await tras).usuarios).toEqual([{ uid: ana.uid, username: 'ana', nombre: ana.nombre, foto: null }]);
   });
 
   it('desconectarUsuario corta sus sockets', async () => {

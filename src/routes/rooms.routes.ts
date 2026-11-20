@@ -15,6 +15,15 @@ router.get('/salas', async (_req, res, next) => {
   }
 });
 
+router.get('/salas/:id', async (req, res, next) => {
+  try {
+    const { uid } = res.locals as AuthLocals;
+    res.json(await svc.obtenerSala(uid, String(req.params.id)));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/salas', async (req, res, next) => {
   try {
     const { uid } = res.locals as AuthLocals;

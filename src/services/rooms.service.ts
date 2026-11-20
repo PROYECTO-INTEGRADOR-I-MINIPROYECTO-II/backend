@@ -1,4 +1,5 @@
 import { AppError } from '../errors';
+import { ID_SALA } from '../validaciones';
 import { NuevaSala } from '../repositories/rooms.repository';
 import * as repo from '../repositories/rooms.repository';
 
@@ -48,4 +49,13 @@ export async function crearSala(uid: string, body: unknown) {
 
 export async function listarSalas(uid: string) {
   return { salas: await db(repo.listarSalas(uid)) };
+}
+
+export const rolEnSala = (sala: { uid: string }, uid: string) => (sala.uid === uid ? 'anfitrion' : 'participante');
+
+export async function obtenerSala(uid: string, id: string) {
+  if (!ID_SALA.test(id)) throw invalido('id', 'Indica un ID de sala válido.');
+  const sala = await db(repo.getSala(id));
+  if (!sala) throw new AppError(404, 'NOT_FOUND', 'La sala no existe. Revisa el ID.');
+  return { ...sala, rol: rolEnSala(sala, uid) };
 }

@@ -134,3 +134,6 @@ export const fotoValida = (v: unknown): v is string | null =>
   v === null ||
   (typeof v === 'string' &&
     (/^https:\/\/[^\s"'<>]+$/.test(v) || (v.length <= 100_000 && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(v))));
+
+/** Id de sala: solo alfanuméricos (evita rutas de Firestore con '/'). */
+export const ID_SALA = /^[A-Za-z0-9]{1,128}$/;

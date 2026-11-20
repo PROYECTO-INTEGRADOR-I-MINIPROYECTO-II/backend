@@ -3,12 +3,13 @@ import { Server, type Socket } from 'socket.io';
 import { getAuthAdmin } from './config/firebase';
 import { getSala, guardarMensaje } from './repositories/rooms.repository';
 import { getPerfil } from './repositories/users.repository';
+import { rolEnSala } from './services/rooms.service';
+import { ID_SALA } from './validaciones';
 
 const MAX_TEXTO = 1000;
-const ID_SALA = /^[A-Za-z0-9]{1,128}$/;
 
 type Ack = (res: unknown) => void;
-type Datos = { uid: string; username: string; salas: Set<string> };
+type Datos = { uid: string; username: string; nombre: string; foto: string | null; salas: Set<string> };
 
 let io: Server | undefined;
 
@@ -31,20 +32,20 @@ const objeto = (p: unknown): Record<string, unknown> => (p && typeof p === 'obje
 async function emitirPresencia(salaId: string, excluir?: Socket) {
   if (!io) return;
   const sockets = await io.in(salaId).fetchSockets();
-  const usuarios = new Map<string, string>();
+  const usuarios = new Map<string, { uid: string; username: string; nombre: string; foto: string | null }>();
   for (const s of sockets) {
     if (s.id === excluir?.id) continue;
-    const { uid, username } = s.data as Datos;
-    usuarios.set(uid, username);
+    const { uid, username, nombre, foto } = s.data as Datos;
+    usuarios.set(uid, { uid, username, nombre, foto });
   }
-  io.to(salaId).emit('sala:presencia', { salaId, usuarios: [...usuarios].map(([uid, username]) => ({ uid, username })) });
+  io.to(salaId).emit('sala:presencia', { salaId, usuarios: [...usuarios.values()] });
 }
 
 const presencia = (salaId: string, excluir?: Socket) =>
   emitirPresencia(salaId, excluir).catch((err) => console.error('Error emitiendo presencia:', err));
 
 function conectar(socket: Socket) {
-  const { uid, username, salas } = socket.data as Datos;
+  const { uid, nombre, salas } = socket.data as Datos;
 
   socket.on('sala:unirse', async (payload: unknown, ack: unknown) => {
     const limpio = idSala(payload);
@@ -55,7 +56,7 @@ function conectar(socket: Socket) {
       if (!sala) return responder(ack, error('NOT_FOUND', 'La sala no existe. Revisa el ID.'));
       await socket.join(limpio);
       salas.add(limpio);
-      responder(ack, { sala });
+      responder(ack, { sala, rol: rolEnSala(sala, uid) });
       await presencia(limpio);
     } catch (err) {
       responder(ack, dbError(err));
@@ -92,7 +93,7 @@ function conectar(socket: Socket) {
         await socket.leave(salaId);
         return responder(ack, error('NOT_FOUND', 'La sala ya no existe.'));
       }
-      const mensaje = await guardarMensaje(salaId, { uid, autor: username, texto: limpio });
+      const mensaje = await guardarMensaje(salaId, { uid, autor: nombre, texto: limpio });
       io?.to(salaId).emit('mensaje:nuevo', mensaje);
       responder(ack, { mensaje });
     } catch (err) {
@@ -126,7 +127,8 @@ async function autenticar(socket: Socket, next: (err?: Error) => void) {
     const { uid } = await getAuthAdmin().verifyIdToken(token, true);
     const perfil = await getPerfil(uid);
     if (!perfil?.username) return fallo('PROFILE_INCOMPLETE', 'Primero elige tu username.');
-    socket.data = { uid, username: perfil.username, salas: new Set<string>() } satisfies Datos;
+    const nombre = `${perfil.nombres} ${perfil.apellidos}`.trim() || perfil.username;
+    socket.data = { uid, username: perfil.username, nombre, foto: perfil.foto ?? null, salas: new Set<string>() } satisfies Datos;
     await socket.join('user:' + uid);
     next();
   } catch (err) {
