@@ -197,7 +197,7 @@
         }
       },
       "patch": {
-        "summary": "Actualiza nombres, apellidos y/o foto (requiere username)",
+        "summary": "Actualiza nombres, apellidos, foto y/o correo (requiere username)",
         "tags": [
           "Usuarios"
         ],
@@ -223,6 +223,10 @@
                     "type": "string",
                     "nullable": true,
                     "description": "URL https, data URL png/jpeg/webp (≤100 KB) o null"
+                  },
+                  "correo": {
+                    "type": "string",
+                    "description": "Nuevo correo; cambia también el de inicio de sesión. Exige haber iniciado sesión en los últimos 5 minutos. Si es igual al actual se ignora."
                   }
                 }
               },
@@ -294,10 +298,7 @@
             }
           },
           "401": {
-            "$ref": "#/components/responses/Unauthenticated"
-          },
-          "409": {
-            "description": "Aún no eligió username",
+            "description": "Sin sesión (UNAUTHENTICATED) o, al cambiar el correo, inicio de sesión no reciente (REAUTH_REQUIRED)",
             "content": {
               "application/json": {
                 "schema": {
@@ -305,8 +306,26 @@
                 },
                 "example": {
                   "error": {
-                    "code": "PROFILE_INCOMPLETE",
-                    "message": "Primero elige tu username."
+                    "code": "REAUTH_REQUIRED",
+                    "message": "Por seguridad, vuelve a iniciar sesión para cambiar tu correo.",
+                    "campo": "correo"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Aún no eligió username (PROFILE_INCOMPLETE) o el correo ya está en otra cuenta (EMAIL_TAKEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "EMAIL_TAKEN",
+                    "message": "Ese correo ya está registrado en otra cuenta.",
+                    "campo": "correo"
                   }
                 }
               }
@@ -511,6 +530,140 @@
         }
       }
     },
+    "/api/salas": {
+      "get": {
+        "summary": "Lista las salas privadas creadas por la sesión",
+        "tags": [
+          "Salas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Salas propias, de más reciente a más antigua",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "salas"
+                  ],
+                  "properties": {
+                    "salas": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Sala"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "salas": [
+                    {
+                      "id": "nP8dK1zX4qWm7R2s9aBc",
+                      "nombre": "Estudio de cálculo",
+                      "descripcion": "Repaso del parcial",
+                      "uid": "abc123",
+                      "creado": "2026-01-01T00:00:00.000Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      },
+      "post": {
+        "summary": "Crea una sala privada para la sesión",
+        "tags": [
+          "Salas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "nombre"
+                ],
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "descripcion": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              },
+              "example": {
+                "nombre": "Estudio de cálculo",
+                "descripcion": "Repaso del parcial"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sala creada; su ID es el identificador privado para compartir",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sala"
+                },
+                "example": {
+                  "id": "nP8dK1zX4qWm7R2s9aBc",
+                  "nombre": "Estudio de cálculo",
+                  "descripcion": "Repaso del parcial",
+                  "uid": "abc123",
+                  "creado": "2026-01-01T00:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nombre o descripción inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Escribe el nombre de la sala.",
+                    "campo": "nombre"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      }
+    },
     "/api/auth/registro": {
       "post": {
         "summary": "Registro con correo y contraseña (público). Luego el cliente inicia sesión con Firebase",
@@ -637,6 +790,224 @@
           }
         }
       }
+    },
+    "/api/salas/{id}": {
+      "get": {
+        "summary": "Consulta una sala por su ID (unirse por ID: cualquier sesión autenticada puede leerla)",
+        "tags": [
+          "Salas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,128}$"
+            },
+            "example": "nP8dK1zX4qWm7R2s9aBc"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "La sala y el rol de la sesión en ella: anfitrion si la creó, participante si no",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Sala"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "rol"
+                      ],
+                      "properties": {
+                        "rol": {
+                          "type": "string",
+                          "enum": [
+                            "anfitrion",
+                            "participante"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "id": "nP8dK1zX4qWm7R2s9aBc",
+                  "nombre": "Estudio de cálculo",
+                  "descripcion": "Repaso del parcial",
+                  "uid": "abc123",
+                  "creado": "2026-01-01T00:00:00.000Z",
+                  "rol": "participante"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ID de sala inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Indica un ID de sala válido.",
+                    "campo": "id"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "La sala no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "La sala no existe. Revisa el ID."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      }
+    },
+    "/api/salas/{id}/mensajes": {
+      "get": {
+        "summary": "Historial de mensajes de una sala por partes de 50 (de más antiguo a más reciente)",
+        "tags": [
+          "Salas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,128}$"
+            },
+            "example": "nP8dK1zX4qWm7R2s9aBc"
+          },
+          {
+            "name": "antes",
+            "in": "query",
+            "required": false,
+            "description": "Fecha ISO: solo mensajes anteriores a ella (use el creado del primer mensaje recibido)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2026-01-01T00:00:00.000Z"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hasta 50 mensajes; hayMas es true si puede haber más antiguos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "mensajes",
+                    "hayMas"
+                  ],
+                  "properties": {
+                    "mensajes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Mensaje"
+                      }
+                    },
+                    "hayMas": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "mensajes": [
+                    {
+                      "id": "m1",
+                      "salaId": "nP8dK1zX4qWm7R2s9aBc",
+                      "uid": "abc123",
+                      "autor": "Ana Pérez",
+                      "texto": "Hola",
+                      "creado": "2026-01-01T00:00:00.000Z"
+                    }
+                  ],
+                  "hayMas": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ID de sala o fecha `antes` inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Indica una fecha ISO válida.",
+                    "campo": "antes"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "La sala no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "La sala no existe. Revisa el ID."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -699,6 +1070,70 @@
                 "google.com"
               ]
             }
+          }
+        },
+        "Sala": {
+          "type": "object",
+          "required": [
+            "id",
+            "nombre",
+            "descripcion",
+            "uid",
+            "creado"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Identificador privado generado por Firestore."
+            },
+            "nombre": {
+              "type": "string"
+            },
+            "descripcion": {
+              "type": "string"
+            },
+            "uid": {
+              "type": "string"
+            },
+            "creado": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      },
+      "Mensaje": {
+        "type": "object",
+        "required": [
+          "id",
+          "salaId",
+          "uid",
+          "autor",
+          "texto",
+          "creado"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "salaId": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string",
+            "nullable": true,
+            "description": "null si el autor eliminó su cuenta."
+          },
+          "autor": {
+            "type": "string",
+            "description": "'Usuario eliminado' si el autor eliminó su cuenta."
+          },
+          "texto": {
+            "type": "string"
+          },
+          "creado": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

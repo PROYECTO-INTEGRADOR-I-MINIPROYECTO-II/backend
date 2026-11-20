@@ -2,8 +2,9 @@ import { DecodedIdToken } from 'firebase-admin/auth';
 import { getAuthAdmin } from '../config/firebase';
 import { AppError } from '../errors';
 import * as repo from '../repositories/users.repository';
+import * as roomsRepo from '../repositories/rooms.repository';
 import { Perfil } from '../repositories/users.repository';
-import { analizarNombre, fotoValida, NOMBRE_MAX_TOTAL, validarUsername } from '../validaciones';
+import { analizarNombre, fotoValida, NOMBRE_MAX_TOTAL, validarCorreo, validarUsername } from '../validaciones';
 
 export type PerfilPublico = Omit<Perfil, 'username' | 'creado'> & {
   uid: string;
@@ -75,23 +76,94 @@ export async function ponerUsername(uid: string, token: DecodedIdToken, username
   return { uid, ...perfil, proveedores: await proveedoresDe(uid) };
 }
 
-export async function actualizarYo(uid: string, body: Record<string, unknown> | undefined): Promise<PerfilPublico> {
+const REAUTH_MAX_SEG = 5 * 60;
+
+// Valida, exige reautenticación reciente y cambia el correo en Auth.
+async function cambiarCorreoAuth(uid: string, token: DecodedIdToken, valor: unknown): Promise<string> {
+  const msg = typeof valor === 'string' ? validarCorreo(valor) : 'Escribe tu correo.';
+  if (msg || typeof valor !== 'string') throw invalido('correo', msg ?? '');
+  // Un token robado no debe poder secuestrar la cuenta cambiando el correo: se exige inicio de sesión reciente.
+  // Falla cerrada: sin auth_time (NaN) también se exige reautenticar.
+  if (!(Date.now() / 1000 - token.auth_time <= REAUTH_MAX_SEG)) {
+    throw new AppError(401, 'REAUTH_REQUIRED', 'Por seguridad, vuelve a iniciar sesión para cambiar tu correo.', 'correo');
+  }
+  const correo = valor.trim();
+  try {
+    await getAuthAdmin().updateUser(uid, { email: correo });
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    if (code === 'auth/email-already-exists') throw new AppError(409, 'EMAIL_TAKEN', 'Ese correo ya está registrado en otra cuenta.', 'correo');
+    if (code === 'auth/invalid-email') throw invalido('correo', 'Escribe un correo con formato nombre@dominio.com.');
+    throw err;
+  }
+  return correo;
+}
+
+export async function actualizarYo(uid: string, token: DecodedIdToken, body: Record<string, unknown> | undefined): Promise<PerfilPublico> {
   const actual = await db(repo.getPerfil(uid));
   if (!actual) throw new AppError(409, 'PROFILE_INCOMPLETE', 'Primero elige tu username.');
-  const { nombres, apellidos, foto } = body ?? {};
-  if (nombres === undefined && apellidos === undefined && foto === undefined) {
-    throw invalido('nombres', 'Envía al menos nombres, apellidos o foto.');
+  const { nombres, apellidos, foto, correo } = body ?? {};
+  if (nombres === undefined && apellidos === undefined && foto === undefined && correo === undefined) {
+    throw invalido('nombres', 'Envía al menos nombres, apellidos, foto o correo.');
   }
   const datos: Partial<Perfil> = {};
   if (nombres !== undefined || apellidos !== undefined) {
     Object.assign(datos, validarNombres(nombres === undefined ? actual.nombres : nombres, apellidos === undefined ? actual.apellidos : apellidos));
   }
   if (foto !== undefined) datos.foto = validarFoto(foto);
-  const perfil = await db(repo.actualizarPerfil(uid, datos));
+  // El correo vigente es el de Auth (el perfil de Google puede tener `correo: ''`).
+  const anterior = correo === undefined ? '' : token.email ?? (await getAuthAdmin().getUser(uid)).email ?? '';
+  const cambiaCorreo = correo !== undefined && !(typeof correo === 'string' && correo.trim().toLowerCase() === anterior.trim().toLowerCase());
+  if (cambiaCorreo) datos.correo = await cambiarCorreoAuth(uid, token, correo);
+  let perfil: Perfil;
+  try {
+    perfil = Object.keys(datos).length ? await db(repo.actualizarPerfil(uid, datos)) : actual;
+  } catch (err) {
+    // Sin cuentas inconsistentes: si falla Firestore, el correo de Auth vuelve al anterior.
+    // shortcut: rollback fallido solo se registra, cuenta queda inconsistente; reconciliar si pasa en producción
+    if (cambiaCorreo) await getAuthAdmin().updateUser(uid, { email: anterior }).catch((e) => console.error('No se pudo revertir el correo:', e));
+    throw err;
+  }
   return { uid, ...perfil, proveedores: await proveedoresDe(uid) };
 }
 
+// El tiempo real es otro servicio: se le avisa por HTTP. Si falla, 502: eliminarYo es idempotente y el cliente reintenta
+// (sin esto un socket vivo podría seguir escribiendo mensajes con su uid tras anonimizar).
+let avisoSinTiempoReal = false;
+async function desconectarEnTiempoReal(uid: string) {
+  const { REALTIME_URL, INTERNO_TOKEN } = process.env;
+  if (!REALTIME_URL) {
+    if (!avisoSinTiempoReal) console.warn('REALTIME_URL no definida: no se desconectan sockets al eliminar cuentas.');
+    avisoSinTiempoReal = true;
+    return;
+  }
+  const falla = new AppError(502, 'REALTIME_UNAVAILABLE', 'No pudimos cerrar tus sesiones abiertas y tu cuenta no se eliminó. Intenta de nuevo en unos segundos.');
+  let res: Response;
+  try {
+    res = await fetch(`${REALTIME_URL}/interno/desconectar/${encodeURIComponent(uid)}`, {
+      method: 'POST',
+      headers: { 'x-interno': INTERNO_TOKEN ?? '' },
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (e) {
+    console.error('No se pudo contactar al tiempo real:', e);
+    throw falla;
+  }
+  if (!res.ok) {
+    console.error('Tiempo real rechazó la desconexión:', res.status);
+    throw falla;
+  }
+}
+
 export async function eliminarYo(uid: string) {
+  // Orden: lo que depende del uid primero y la cuenta al final; si falla a mitad, reintentar es seguro (cada paso es idempotente).
+  // Cortar, revocar y volver a cortar: si el tiempo real falla, la sesión sigue viva para reintentar; y un socket que
+  // reconecte entre el primer corte y la revocación (con el token aún válido) cae en el segundo corte.
+  await desconectarEnTiempoReal(uid);
+  await getAuthAdmin().revokeRefreshTokens(uid);
+  await desconectarEnTiempoReal(uid);
+  await db(roomsRepo.borrarSalasDePropietario(uid));
+  await db(roomsRepo.anonimizarMensajes(uid));
   await db(repo.borrarPerfil(uid));
   await getAuthAdmin().deleteUser(uid);
 }
