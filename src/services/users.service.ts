@@ -98,6 +98,7 @@ async function cambiarCorreoAuth(uid: string, token: DecodedIdToken, valor: unkn
   return correo;
 }
 
+//Actualización de perfil ingresado actualmente
 export async function actualizarYo(uid: string, token: DecodedIdToken, body: Record<string, unknown> | undefined): Promise<PerfilPublico> {
   const actual = await db(repo.getPerfil(uid));
   if (!actual) throw new AppError(409, 'PROFILE_INCOMPLETE', 'Primero elige tu username.');
@@ -126,11 +127,13 @@ export async function actualizarYo(uid: string, token: DecodedIdToken, body: Rec
   return { uid, ...perfil, proveedores: await proveedoresDe(uid) };
 }
 
+//Eliminación de perfil
 export async function eliminarYo(uid: string) {
   await db(repo.borrarPerfil(uid));
   await getAuthAdmin().deleteUser(uid);
 }
 
+//Desvinculación de Google
 export async function desvincularGoogle(uid: string) {
   const proveedores = await proveedoresDe(uid);
   if (!proveedores.includes('google.com')) throw new AppError(404, 'NOT_FOUND', 'Tu cuenta no tiene Google vinculado.');
