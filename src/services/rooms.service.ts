@@ -59,3 +59,19 @@ export async function obtenerSala(uid: string, id: string) {
   if (!sala) throw new AppError(404, 'NOT_FOUND', 'La sala no existe. Revisa el ID.');
   return { ...sala, rol: rolEnSala(sala, uid) };
 }
+
+const PAGINA_MENSAJES = 50;
+
+// Página de historial (antiguo→reciente); sin db(): lo usan la ruta y el ack de sala:unirse, cada uno maneja sus errores.
+export async function historial(salaId: string, antes?: string) {
+  const mensajes = await repo.listarMensajes(salaId, antes, PAGINA_MENSAJES);
+  return { mensajes, hayMas: mensajes.length === PAGINA_MENSAJES };
+}
+
+export async function obtenerMensajes(id: string, antes?: string) {
+  if (!ID_SALA.test(id)) throw invalido('id', 'Indica un ID de sala válido.');
+  if (antes !== undefined && Number.isNaN(Date.parse(antes))) throw invalido('antes', 'Indica una fecha ISO válida.');
+  const desde = antes === undefined ? undefined : new Date(antes).toISOString();
+  if (!(await db(repo.getSala(id)))) throw new AppError(404, 'NOT_FOUND', 'La sala no existe. Revisa el ID.');
+  return db(historial(id, desde));
+}

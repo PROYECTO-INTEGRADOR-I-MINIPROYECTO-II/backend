@@ -24,6 +24,15 @@ router.get('/salas/:id', async (req, res, next) => {
   }
 });
 
+router.get('/salas/:id/mensajes', async (req, res, next) => {
+  try {
+    const antes = req.query.antes;
+    res.json(await svc.obtenerMensajes(String(req.params.id), antes === undefined ? undefined : String(antes)));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/salas', async (req, res, next) => {
   try {
     const { uid } = res.locals as AuthLocals;

@@ -3,7 +3,7 @@ import { Server, type Socket } from 'socket.io';
 import { getAuthAdmin } from './config/firebase';
 import { getSala, guardarMensaje } from './repositories/rooms.repository';
 import { getPerfil } from './repositories/users.repository';
-import { rolEnSala } from './services/rooms.service';
+import { historial, rolEnSala } from './services/rooms.service';
 import { ID_SALA } from './validaciones';
 
 const MAX_TEXTO = 1000;
@@ -54,9 +54,11 @@ function conectar(socket: Socket) {
       const sala = await getSala(limpio);
       if (socket.disconnected) return;
       if (!sala) return responder(ack, error('NOT_FOUND', 'La sala no existe. Revisa el ID.'));
+      const { mensajes, hayMas } = await historial(limpio);
+      if (socket.disconnected) return;
       await socket.join(limpio);
       salas.add(limpio);
-      responder(ack, { sala, rol: rolEnSala(sala, uid) });
+      responder(ack, { sala, rol: rolEnSala(sala, uid), mensajes, hayMas });
       await presencia(limpio);
     } catch (err) {
       responder(ack, dbError(err));
