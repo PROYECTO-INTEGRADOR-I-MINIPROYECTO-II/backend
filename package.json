@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "dev:rt": "PORT=3001 tsx watch --env-file-if-exists=.env src/tiempo-real.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run --coverage",

@@ -3,7 +3,6 @@ import { getAuthAdmin } from '../config/firebase';
 import { AppError } from '../errors';
 import * as repo from '../repositories/users.repository';
 import * as roomsRepo from '../repositories/rooms.repository';
-import { desconectarUsuario } from '../realtime';
 import { Perfil } from '../repositories/users.repository';
 import { analizarNombre, fotoValida, NOMBRE_MAX_TOTAL, validarCorreo, validarUsername } from '../validaciones';
 
@@ -128,11 +127,41 @@ export async function actualizarYo(uid: string, token: DecodedIdToken, body: Rec
   return { uid, ...perfil, proveedores: await proveedoresDe(uid) };
 }
 
+// El tiempo real es otro servicio: se le avisa por HTTP. Si falla, 502: eliminarYo es idempotente y el cliente reintenta
+// (sin esto un socket vivo podría seguir escribiendo mensajes con su uid tras anonimizar).
+let avisoSinTiempoReal = false;
+async function desconectarEnTiempoReal(uid: string) {
+  const { REALTIME_URL, INTERNO_TOKEN } = process.env;
+  if (!REALTIME_URL) {
+    if (!avisoSinTiempoReal) console.warn('REALTIME_URL no definida: no se desconectan sockets al eliminar cuentas.');
+    avisoSinTiempoReal = true;
+    return;
+  }
+  const falla = new AppError(502, 'REALTIME_UNAVAILABLE', 'No pudimos cerrar tus sesiones abiertas y tu cuenta no se eliminó. Intenta de nuevo en unos segundos.');
+  let res: Response;
+  try {
+    res = await fetch(`${REALTIME_URL}/interno/desconectar/${encodeURIComponent(uid)}`, {
+      method: 'POST',
+      headers: { 'x-interno': INTERNO_TOKEN ?? '' },
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (e) {
+    console.error('No se pudo contactar al tiempo real:', e);
+    throw falla;
+  }
+  if (!res.ok) {
+    console.error('Tiempo real rechazó la desconexión:', res.status);
+    throw falla;
+  }
+}
+
 export async function eliminarYo(uid: string) {
   // Orden: lo que depende del uid primero y la cuenta al final; si falla a mitad, reintentar es seguro (cada paso es idempotente).
-  // Revocar antes de cortar: sin esto el cliente reconecta con el mismo token y escribe mensajes con su uid tras anonimizar.
+  // Cortar, revocar y volver a cortar: si el tiempo real falla, la sesión sigue viva para reintentar; y un socket que
+  // reconecte entre el primer corte y la revocación (con el token aún válido) cae en el segundo corte.
+  await desconectarEnTiempoReal(uid);
   await getAuthAdmin().revokeRefreshTokens(uid);
-  desconectarUsuario(uid);
+  await desconectarEnTiempoReal(uid);
   await db(roomsRepo.borrarSalasDePropietario(uid));
   await db(roomsRepo.anonimizarMensajes(uid));
   await db(repo.borrarPerfil(uid));
