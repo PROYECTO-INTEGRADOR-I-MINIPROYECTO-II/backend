@@ -150,6 +150,26 @@ describe.skipIf(!hayEmulador)('salas (emuladores)', () => {
       expect(resto.hayMas).toBe(false);
     });
 
+    it('con exactamente 50 mensajes hayMas es false', async () => {
+      const { idToken } = await crearCuenta('ana@x.com');
+      const sala = await nuevaSala(idToken);
+      await insertar(sala, 50);
+      const res = (await request(app).get(`/api/salas/${sala}/mensajes`).set(bearer(idToken))).body;
+      expect(res.mensajes).toHaveLength(50);
+      expect(res.hayMas).toBe(false);
+    });
+
+    it('antes sin milisegundos equivale al ISO canónico', async () => {
+      const { idToken } = await crearCuenta('ana@x.com');
+      const sala = await nuevaSala(idToken);
+      await insertar(sala, 8);
+      const pedir = (antes: string) => request(app).get(`/api/salas/${sala}/mensajes`).query({ antes }).set(bearer(idToken));
+      const sinMs = await pedir('2026-01-01T00:00:05Z');
+      expect(sinMs.status).toBe(200);
+      expect(sinMs.body.mensajes.map((m: { texto: string }) => m.texto)).toEqual(['m0', 'm1', 'm2', 'm3', 'm4']);
+      expect(sinMs.body).toEqual((await pedir('2026-01-01T00:00:05.000Z')).body);
+    });
+
     it('muestra "Usuario eliminado" en mensajes anonimizados', async () => {
       const { idToken } = await crearCuenta('ana@x.com');
       const sala = await nuevaSala(idToken);

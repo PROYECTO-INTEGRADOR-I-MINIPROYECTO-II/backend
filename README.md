@@ -24,6 +24,8 @@ Documentación Swagger: `/api/docs`.
 | DELETE | `/api/usuarios/yo/proveedores/google` | Desvincula Google (`204`); `409 LAST_PROVIDER` si no tiene contraseña |
 | POST | `/api/salas` | Crea una sala privada `{ nombre, descripcion? }` (`201`); el servidor asigna el ID y propietario |
 | GET | `/api/salas` | Lista las salas privadas creadas por la sesión (`{ salas }`) |
+| GET | `/api/salas/:id` | Consulta una sala por ID con el rol de la sesión (`rol`: `anfitrion` o `participante`); `404` si no existe |
+| GET | `/api/salas/:id/mensajes?antes=` | Historial por partes de 50, de antiguo a reciente (`{ mensajes, hayMas }`); `antes` es una fecha ISO (el `creado` del primer mensaje recibido) |
 
 Las rutas `/api/usuarios/**` exigen `Authorization: Bearer <ID token de Firebase>`; sin token, inválido, vencido o revocado: `401 UNAUTHENTICATED`. El login lo hace Firebase en el cliente; `GET /api/usuarios/yo` sirve para comprobar la sesión.
 

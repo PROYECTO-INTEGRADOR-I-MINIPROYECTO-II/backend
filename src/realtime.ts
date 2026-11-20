@@ -54,10 +54,18 @@ function conectar(socket: Socket) {
       const sala = await getSala(limpio);
       if (socket.disconnected) return;
       if (!sala) return responder(ack, error('NOT_FOUND', 'La sala no existe. Revisa el ID.'));
-      const { mensajes, hayMas } = await historial(limpio);
-      if (socket.disconnected) return;
+      // Se une antes de leer el historial para no perder mensajes en medio; el cliente deduplica por id.
       await socket.join(limpio);
       salas.add(limpio);
+      let pagina;
+      try {
+        pagina = await historial(limpio);
+      } catch (err) {
+        salas.delete(limpio);
+        await socket.leave(limpio);
+        throw err;
+      }
+      const { mensajes, hayMas } = pagina;
       responder(ack, { sala, rol: rolEnSala(sala, uid), mensajes, hayMas });
       await presencia(limpio);
     } catch (err) {

@@ -64,8 +64,10 @@ const PAGINA_MENSAJES = 50;
 
 // Página de historial (antiguo→reciente); sin db(): lo usan la ruta y el ack de sala:unirse, cada uno maneja sus errores.
 export async function historial(salaId: string, antes?: string) {
-  const mensajes = await repo.listarMensajes(salaId, antes, PAGINA_MENSAJES);
-  return { mensajes, hayMas: mensajes.length === PAGINA_MENSAJES };
+  const leidos = await repo.listarMensajes(salaId, antes, PAGINA_MENSAJES + 1);
+  const hayMas = leidos.length > PAGINA_MENSAJES;
+  // listarMensajes devuelve antiguo→reciente: el extra (el más antiguo) va al frente.
+  return { mensajes: hayMas ? leidos.slice(1) : leidos, hayMas };
 }
 
 export async function obtenerMensajes(id: string, antes?: string) {
