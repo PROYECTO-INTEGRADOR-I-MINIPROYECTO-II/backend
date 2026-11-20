@@ -3,7 +3,7 @@ import request from 'supertest';
 import { io as cliente, type Socket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import app from '../src/app';
-import { getDb } from '../src/config/firebase';
+import { getAuthAdmin, getDb } from '../src/config/firebase';
 import { desconectarUsuario } from '../src/realtime';
 import { crearServidorTiempoReal } from '../src/tiempo-real';
 import { crearCuenta, hayEmulador, limpiar } from './emulador';
@@ -184,6 +184,30 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
     expect((await llamar({ 'x-interno': 'secreto' })).status).toBe(204);
     await cerrado;
     expect(ana.socket.connected).toBe(false);
+  });
+
+  it('sin INTERNO_TOKEN configurado el endpoint interno responde 401', async () => {
+    const guardado = process.env.INTERNO_TOKEN;
+    delete process.env.INTERNO_TOKEN;
+    try {
+      expect((await fetch(`${url}/interno/desconectar/x`, { method: 'POST', headers: { 'x-interno': '' } })).status).toBe(401);
+    } finally {
+      process.env.INTERNO_TOKEN = guardado;
+    }
+  });
+
+  it('si el tiempo real no responde, eliminar la cuenta da 502 y no la borra', async () => {
+    const ana = await usuario('ana@x.com', 'ana');
+    const guardado = process.env.REALTIME_URL;
+    process.env.REALTIME_URL = 'http://localhost:1';
+    try {
+      const r = await request(app).delete('/api/usuarios/yo').set(bearer(ana.idToken)).expect(502);
+      expect(r.body.error?.code ?? r.body.code).toBe('REALTIME_UNAVAILABLE');
+    } finally {
+      process.env.REALTIME_URL = guardado;
+    }
+    expect((await getAuthAdmin().getUser(ana.uid)).uid).toBe(ana.uid);
+    await request(app).delete('/api/usuarios/yo').set(bearer(ana.idToken)).expect(204);
   });
 
   it('rutas desconocidas dan 404', async () => {

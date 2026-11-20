@@ -127,15 +127,31 @@ export async function actualizarYo(uid: string, token: DecodedIdToken, body: Rec
   return { uid, ...perfil, proveedores: await proveedoresDe(uid) };
 }
 
-// El tiempo real es otro servicio: se le avisa por HTTP. Si falla solo se registra (la sesión ya está revocada).
+// El tiempo real es otro servicio: se le avisa por HTTP. Si falla, 502: eliminarYo es idempotente y el cliente reintenta
+// (sin esto un socket vivo podría seguir escribiendo mensajes con su uid tras anonimizar).
+let avisoSinTiempoReal = false;
 async function desconectarEnTiempoReal(uid: string) {
   const { REALTIME_URL, INTERNO_TOKEN } = process.env;
-  if (!REALTIME_URL) return;
+  if (!REALTIME_URL) {
+    if (!avisoSinTiempoReal) console.warn('REALTIME_URL no definida: no se desconectan sockets al eliminar cuentas.');
+    avisoSinTiempoReal = true;
+    return;
+  }
+  const falla = new AppError(502, 'REALTIME_UNAVAILABLE', 'No pudimos cerrar tus sesiones abiertas. Intenta de nuevo en unos segundos.');
+  let res: Response;
   try {
-    const res = await fetch(`${REALTIME_URL}/interno/desconectar/${encodeURIComponent(uid)}`, { method: 'POST', headers: { 'x-interno': INTERNO_TOKEN ?? '' } });
-    if (!res.ok) console.error('Tiempo real rechazó la desconexión:', res.status);
+    res = await fetch(`${REALTIME_URL}/interno/desconectar/${encodeURIComponent(uid)}`, {
+      method: 'POST',
+      headers: { 'x-interno': INTERNO_TOKEN ?? '' },
+      signal: AbortSignal.timeout(5000),
+    });
   } catch (e) {
-    console.error('No se pudo desconectar al usuario en tiempo real:', e);
+    console.error('No se pudo contactar al tiempo real:', e);
+    throw falla;
+  }
+  if (!res.ok) {
+    console.error('Tiempo real rechazó la desconexión:', res.status);
+    throw falla;
   }
 }
 

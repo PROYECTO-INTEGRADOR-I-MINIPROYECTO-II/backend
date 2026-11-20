@@ -146,7 +146,7 @@ El código nunca toca el Firebase real; esto lo hace una persona del equipo con 
 
 Son dos procesos de la misma imagen: la API (`node dist/index.js`) y el tiempo real (`node dist/tiempo-real.js`, socket.io).
 
-- Render: segundo web service con la misma imagen y Docker command `node dist/tiempo-real.js`. Variables: `FIREBASE_SERVICE_ACCOUNT`, `CORS_ORIGIN`, `INTERNO_TOKEN`. En la API, además: `REALTIME_URL` (URL del tiempo real) e `INTERNO_TOKEN` (el mismo valor). El deploy usa el secret `RENDER_DEPLOY_HOOK_RT` (opcional).
+- Render: segundo web service con la misma imagen y Docker command `node dist/tiempo-real.js`. Variables: `FIREBASE_SERVICE_ACCOUNT`, `CORS_ORIGIN`, `INTERNO_TOKEN`. En la API, además: `REALTIME_URL` (URL del tiempo real) e `INTERNO_TOKEN` (el mismo valor). Health check path del servicio en Render: `/api/health`. El deploy usa el secret `RENDER_DEPLOY_HOOK_RT` (opcional).
 - Local: `npm run dev` (API, 3000) y `npm run dev:rt` (tiempo real, 3001). El socket del frontend apunta a la URL del tiempo real.
 
 ## Estructura por capas
