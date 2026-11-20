@@ -41,6 +41,28 @@ describe.skipIf(!hayEmulador)('salas (emuladores)', () => {
     expect(ajenas.body).toEqual({ salas: [] });
   });
 
+  it('consulta una sala por ID con el rol de quien la pide', async () => {
+    const ana = await crearCuenta('ana@x.com');
+    const bea = await crearCuenta('bea@x.com');
+    const { id } = (await request(app).post('/api/salas').set(bearer(ana.idToken)).send({ nombre: 'Estudio' }).expect(201)).body;
+
+    const propia = await request(app).get(`/api/salas/${id}`).set(bearer(ana.idToken));
+    expect(propia.status).toBe(200);
+    expect(propia.body).toMatchObject({ id, nombre: 'Estudio', uid: ana.localId, rol: 'anfitrion' });
+    expect((await request(app).get(`/api/salas/${id}`).set(bearer(bea.idToken))).body.rol).toBe('participante');
+  });
+
+  it('GET /api/salas/:id responde 404, 400 y 401', async () => {
+    const { idToken } = await crearCuenta('ana@x.com');
+    const noExiste = await request(app).get('/api/salas/noexiste').set(bearer(idToken));
+    expect(noExiste.status).toBe(404);
+    expect(noExiste.body.error).toMatchObject({ code: 'NOT_FOUND', message: 'La sala no existe. Revisa el ID.' });
+    const malo = await request(app).get('/api/salas/a.b').set(bearer(idToken));
+    expect(malo.status).toBe(400);
+    expect(malo.body.error).toMatchObject({ code: 'VALIDATION_ERROR', campo: 'id' });
+    await request(app).get('/api/salas/noexiste').expect(401);
+  });
+
   it('valida el nombre y la longitud de los campos', async () => {
     const { idToken } = await crearCuenta('ana@x.com');
     const crear = (body: object) => request(app).post('/api/salas').set(bearer(idToken)).send(body);

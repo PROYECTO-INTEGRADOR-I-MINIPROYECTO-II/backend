@@ -790,6 +790,109 @@
           }
         }
       }
+    },
+    "/api/salas/{id}": {
+      "get": {
+        "summary": "Consulta una sala por su ID (unirse por ID: cualquier sesión autenticada puede leerla)",
+        "tags": [
+          "Salas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,128}$"
+            },
+            "example": "nP8dK1zX4qWm7R2s9aBc"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "La sala y el rol de la sesión en ella: anfitrion si la creó, participante si no",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Sala"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "rol"
+                      ],
+                      "properties": {
+                        "rol": {
+                          "type": "string",
+                          "enum": [
+                            "anfitrion",
+                            "participante"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "id": "nP8dK1zX4qWm7R2s9aBc",
+                  "nombre": "Estudio de cálculo",
+                  "descripcion": "Repaso del parcial",
+                  "uid": "abc123",
+                  "creado": "2026-01-01T00:00:00.000Z",
+                  "rol": "participante"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ID de sala inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Indica un ID de sala válido.",
+                    "campo": "id"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "La sala no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "La sala no existe. Revisa el ID."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
