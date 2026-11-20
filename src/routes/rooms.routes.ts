@@ -6,6 +6,7 @@ const router = Router();
 
 router.use(requireAuth);
 
+//Rutas de salas creadas
 router.get('/salas', async (_req, res, next) => {
   try {
     const { uid } = res.locals as AuthLocals;
@@ -15,6 +16,7 @@ router.get('/salas', async (_req, res, next) => {
   }
 });
 
+//Creación de nuevas salas
 router.post('/salas', async (req, res, next) => {
   try {
     const { uid } = res.locals as AuthLocals;
