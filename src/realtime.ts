@@ -62,11 +62,11 @@ function conectar(servidor: Server, socket: Socket, vigilar: (sala: Sala) => Obs
       if (socket.disconnected) return;
       try {
         const observacion = vigilar(sala);
-        const pagina = await historial(limpio);
+        const { mensajes, hayMas } = await historial(limpio);
         const actual = observacion.sala;
         if (!actual) return responder(ack, error('NOT_FOUND', 'La sala ya no existe.'));
         if (!socket.rooms.has(grupo)) return;
-        responder(ack, { sala: actual, rol: rolEnSala(actual, uid), ...pagina });
+        responder(ack, { sala: actual, rol: rolEnSala(actual, uid), mensajes, hayMas });
       } catch (err) {
         await socket.leave(grupo);
         throw err;
@@ -132,21 +132,54 @@ export function iniciarTiempoReal(server: http.Server) {
     const grupo = canal(sala.id);
     const existente = observaciones.get(grupo);
     if (existente) return existente;
-    const observacion: Observacion = { sala, cancelar: () => {} };
-    observacion.cancelar = observarSala(sala.id, (actual) => {
-      const anterior = observacion.sala;
-      observacion.sala = actual;
-      if (!actual) {
-        servidor.to(grupo).emit('sala:eliminada', { salaId: sala.id });
-        servidor.in(grupo).socketsLeave(grupo);
-      } else if (actual.nombre !== anterior?.nombre || actual.descripcion !== anterior?.descripcion) {
-        servidor.to(grupo).emit('sala:actualizada', { sala: actual });
-      }
-    }, (err) => {
-      observaciones.delete(grupo);
-      console.error('Error observando la sala:', err);
-    });
+    let cancelarWatch: (() => void) | undefined;
+    let reintento: ReturnType<typeof setTimeout> | undefined;
+    let espera = 1000;
+    let generacion = 0;
+    const observacion: Observacion = { sala, cancelar: () => {
+      generacion++;
+      if (reintento) clearTimeout(reintento);
+      cancelarWatch?.();
+    } };
     observaciones.set(grupo, observacion);
+
+    function observar() {
+      if (observaciones.get(grupo) !== observacion || !adapter.rooms.get(grupo)?.size) return;
+      const turno = ++generacion;
+      const vigente = () => turno === generacion && observaciones.get(grupo) === observacion;
+      const fallo = (err: unknown) => {
+        if (!vigente()) return;
+        generacion++;
+        cancelarWatch?.();
+        cancelarWatch = undefined;
+        console.error('Error observando la sala:', err);
+        reintento = setTimeout(() => {
+          reintento = undefined;
+          observar();
+        }, espera);
+        espera = Math.min(espera * 2, 30000);
+      };
+      try {
+        const cancelar = observarSala(sala.id, (actual) => {
+          if (!vigente()) return;
+          espera = 1000;
+          const anterior = observacion.sala;
+          observacion.sala = actual;
+          if (!actual) {
+            servidor.to(grupo).emit('sala:eliminada', { salaId: sala.id });
+            servidor.in(grupo).socketsLeave(grupo);
+          } else if (actual.nombre !== anterior?.nombre || actual.descripcion !== anterior?.descripcion) {
+            servidor.to(grupo).emit('sala:actualizada', { sala: actual });
+          }
+        }, fallo);
+        // Un callback síncrono pudo cancelar esta suscripción antes de recibir su cierre.
+        if (vigente()) cancelarWatch = cancelar;
+        else cancelar();
+      } catch (err) {
+        fallo(err);
+      }
+    }
+    observar();
     return observacion;
   }
 
