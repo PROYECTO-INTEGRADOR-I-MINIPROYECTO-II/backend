@@ -83,17 +83,24 @@ export async function eliminarSala(uid: string, id: string) {
 const PAGINA_MENSAJES = 50;
 
 // Página de historial (antiguo→reciente); sin db(): lo usan la ruta y el ack de sala:unirse, cada uno maneja sus errores.
-export async function historial(salaId: string, antes?: string) {
-  const leidos = await repo.listarMensajes(salaId, antes, PAGINA_MENSAJES + 1);
+export async function historial(salaId: string, antes?: string, antesId?: string) {
+  const leidos = await repo.listarMensajes(salaId, PAGINA_MENSAJES + 1, antes, antesId);
   const hayMas = leidos.length > PAGINA_MENSAJES;
   // listarMensajes devuelve antiguo→reciente: el extra (el más antiguo) va al frente.
-  return { mensajes: hayMas ? leidos.slice(1) : leidos, hayMas };
+  const mensajes = hayMas ? leidos.slice(1) : leidos;
+  const primero = mensajes[0];
+  return { mensajes, hayMas, siguiente: hayMas ? { antes: primero.creado, antesId: primero.id } : null };
 }
 
-export async function obtenerMensajes(id: string, antes?: string) {
+export async function obtenerMensajes(id: string, antes?: unknown, antesId?: unknown) {
   if (!ID_SALA.test(id)) throw invalido('id', 'Indica un ID de sala válido.');
-  if (antes !== undefined && Number.isNaN(Date.parse(antes))) throw invalido('antes', 'Indica una fecha ISO válida.');
+  if (antes !== undefined && (typeof antes !== 'string' || Number.isNaN(Date.parse(antes)))) {
+    throw invalido('antes', 'Indica una fecha ISO válida.');
+  }
+  if (antesId !== undefined && (antes === undefined || typeof antesId !== 'string' || !ID_SALA.test(antesId))) {
+    throw invalido('antesId', 'Indica el ID del mensaje junto con su fecha.');
+  }
   const desde = antes === undefined ? undefined : new Date(antes).toISOString();
   if (!(await db(repo.getSala(id)))) throw new AppError(404, 'NOT_FOUND', 'La sala no existe. Revisa el ID.');
-  return db(historial(id, desde));
+  return db(historial(id, desde, antesId));
 }

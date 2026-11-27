@@ -1,3 +1,4 @@
+import { FieldPath } from 'firebase-admin/firestore';
 import { getDb } from '../config/firebase';
 import { AppError } from '../errors';
 
@@ -124,10 +125,9 @@ export async function guardarMensaje(salaId: string, datos: NuevoMensaje): Promi
   });
 }
 
-export async function listarMensajes(salaId: string, antes?: string, limite = 50): Promise<Mensaje[]> {
-  // shortcut: mensajes con el mismo ms en el borde de página se paginan solo por creado; añadir id como desempate si pasa.
-  let consulta = salas().doc(salaId).collection('messages').orderBy('creado', 'desc');
-  if (antes) consulta = consulta.where('creado', '<', antes);
+export async function listarMensajes(salaId: string, limite: number, antes?: string, antesId?: string): Promise<Mensaje[]> {
+  let consulta = salas().doc(salaId).collection('messages').orderBy('creado', 'desc').orderBy(FieldPath.documentId(), 'desc');
+  if (antes) consulta = antesId ? consulta.startAfter(antes, antesId) : consulta.startAfter(antes);
   const snapshot = await consulta.limit(limite).get();
   return snapshot.docs.map((doc) => ({ id: doc.id, salaId, ...(doc.data() as Omit<Mensaje, 'id' | 'salaId'>) })).reverse();
 }

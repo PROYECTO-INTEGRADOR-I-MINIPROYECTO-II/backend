@@ -65,7 +65,7 @@ Si el token falta o es inválido, o el usuario aún no tiene username, el handsh
 | servidor → cliente | `sala:actualizada` | `{ sala }` | a los participantes de la sala editada, incluido el anfitrión si está conectado |
 | servidor → cliente | `sala:eliminada` | `{ salaId }` | a los participantes de la sala eliminada, antes de retirarlos de ella |
 
-Los mensajes se guardan en `rooms/{salaId}/messages`.
+Los mensajes se guardan en `rooms/{salaId}/messages`. Para pedir más historial a partir del ack de `sala:unirse`, use `creado` e `id` de su primer mensaje como `antes` y `antesId`. La API devuelve `siguiente` con ambos parámetros, o `null` cuando se agota el historial. Si se envía solo `antes`, se devuelven los mensajes estrictamente anteriores a esa fecha.
 
 ```mermaid
 erDiagram
