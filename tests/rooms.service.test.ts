@@ -5,6 +5,7 @@ import * as svc from '../src/services/rooms.service';
 vi.mock('../src/repositories/rooms.repository', () => ({
   crearSala: vi.fn(),
   listarSalas: vi.fn(),
+  listarMensajes: vi.fn(),
   borrarSalasDePropietario: vi.fn(),
 }));
 
@@ -41,6 +42,18 @@ describe('servicio de salas', () => {
       campo: 'nombre',
     });
     expect(crearSalaRepo).not.toHaveBeenCalled();
+  });
+
+  it('devuelve un cursor de fecha e ID para la página anterior', async () => {
+    const creado = '2026-01-01T00:00:00.000Z';
+    const mensajes = Array.from({ length: 51 }, (_, i) => ({
+      id: `msg${i}`, salaId: 'sala1', creado, uid: 'u1', autor: 'Ana', texto: 'Hola',
+    }));
+    vi.mocked(repo.listarMensajes).mockResolvedValue(mensajes);
+    expect(await svc.historial('sala1', creado, 'msg51')).toEqual({
+      mensajes: mensajes.slice(1), hayMas: true, siguiente: { antes: creado, antesId: 'msg1' },
+    });
+    expect(repo.listarMensajes).toHaveBeenCalledWith('sala1', 51, creado, 'msg51');
   });
 
   it('convierte errores de Firestore en DB_UNAVAILABLE', async () => {

@@ -159,6 +159,28 @@ describe.skipIf(!hayEmulador)('salas (emuladores)', () => {
       expect(res.hayMas).toBe(false);
     });
 
+    it('pagina sin omitir ni duplicar mensajes con la misma fecha', async () => {
+      const { idToken } = await crearCuenta('ana@x.com');
+      const sala = await nuevaSala(idToken);
+      const firestore = getDb();
+      const col = firestore.collection('rooms').doc(sala).collection('messages');
+      const batch = firestore.batch();
+      const creado = '2026-01-01T00:00:00.000Z';
+      for (let i = 0; i < 51; i++) {
+        const id = `m${String(i).padStart(2, '0')}`;
+        batch.create(col.doc(id), { uid: 'u', autor: 'Ana', texto: id, creado });
+      }
+      await batch.commit();
+
+      const url = `/api/salas/${sala}/mensajes`;
+      const pagina = (await request(app).get(url).set(bearer(idToken)).expect(200)).body;
+      expect(pagina.mensajes).toHaveLength(50);
+      expect(pagina.siguiente).toEqual({ antes: creado, antesId: 'm01' });
+      const resto = (await request(app).get(url).set(bearer(idToken)).query(pagina.siguiente).expect(200)).body;
+      expect(resto.mensajes.map((m: { id: string }) => m.id)).toEqual(['m00']);
+      expect(resto.siguiente).toBeNull();
+    });
+
     it('antes sin milisegundos equivale al ISO canónico', async () => {
       const { idToken } = await crearCuenta('ana@x.com');
       const sala = await nuevaSala(idToken);
