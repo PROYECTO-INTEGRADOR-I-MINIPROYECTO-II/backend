@@ -1,7 +1,7 @@
 import type http from 'node:http';
 import { Server, type Socket } from 'socket.io';
 import { getAuthAdmin } from './config/firebase';
-import { getSala, guardarMensaje } from './repositories/rooms.repository';
+import { getSala, guardarMensaje, observarSala, type Sala } from './repositories/rooms.repository';
 import { getPerfil } from './repositories/users.repository';
 import { historial, rolEnSala } from './services/rooms.service';
 import { ID_SALA } from './validaciones';
@@ -9,7 +9,11 @@ import { ID_SALA } from './validaciones';
 const MAX_TEXTO = 1000;
 
 type Ack = (res: unknown) => void;
-type Datos = { uid: string; username: string; nombre: string; foto: string | null; salas: Set<string> };
+type Datos = { uid: string; username: string; nombre: string; foto: string | null };
+type Observacion = { sala: Sala | null; cancelar: () => void };
+
+const PREFIJO_SALA = 'sala:';
+const canal = (id: string) => PREFIJO_SALA + id;
 
 let io: Server | undefined;
 
@@ -29,23 +33,21 @@ const idSala = (p: unknown) => {
 };
 const objeto = (p: unknown): Record<string, unknown> => (p && typeof p === 'object' ? (p as Record<string, unknown>) : {});
 
-async function emitirPresencia(salaId: string, excluir?: Socket) {
-  if (!io) return;
-  const sockets = await io.in(salaId).fetchSockets();
+async function emitirPresencia(servidor: Server, salaId: string) {
+  const sockets = await servidor.in(canal(salaId)).fetchSockets();
   const usuarios = new Map<string, { uid: string; username: string; nombre: string; foto: string | null }>();
   for (const s of sockets) {
-    if (s.id === excluir?.id) continue;
     const { uid, username, nombre, foto } = s.data as Datos;
     usuarios.set(uid, { uid, username, nombre, foto });
   }
-  io.to(salaId).emit('sala:presencia', { salaId, usuarios: [...usuarios.values()] });
+  servidor.to(canal(salaId)).emit('sala:presencia', { salaId, usuarios: [...usuarios.values()] });
 }
 
-const presencia = (salaId: string, excluir?: Socket) =>
-  emitirPresencia(salaId, excluir).catch((err) => console.error('Error emitiendo presencia:', err));
+const presencia = (servidor: Server, salaId: string) =>
+  emitirPresencia(servidor, salaId).catch((err) => console.error('Error emitiendo presencia:', err));
 
-function conectar(socket: Socket) {
-  const { uid, nombre, salas } = socket.data as Datos;
+function conectar(servidor: Server, socket: Socket, vigilar: (sala: Sala) => Observacion) {
+  const { uid, nombre } = socket.data as Datos;
 
   socket.on('sala:unirse', async (payload: unknown, ack: unknown) => {
     const limpio = idSala(payload);
@@ -55,19 +57,21 @@ function conectar(socket: Socket) {
       if (socket.disconnected) return;
       if (!sala) return responder(ack, error('NOT_FOUND', 'La sala no existe. Revisa el ID.'));
       // Se une antes de leer el historial para no perder mensajes en medio; el cliente deduplica por id.
-      await socket.join(limpio);
-      salas.add(limpio);
-      let pagina;
+      const grupo = canal(limpio);
+      await socket.join(grupo);
+      if (socket.disconnected) return;
       try {
-        pagina = await historial(limpio);
+        const observacion = vigilar(sala);
+        const { mensajes, hayMas } = await historial(limpio);
+        const actual = observacion.sala;
+        if (!actual) return responder(ack, error('NOT_FOUND', 'La sala ya no existe.'));
+        if (!socket.rooms.has(grupo)) return;
+        responder(ack, { sala: actual, rol: rolEnSala(actual, uid), mensajes, hayMas });
       } catch (err) {
-        salas.delete(limpio);
-        await socket.leave(limpio);
+        await socket.leave(grupo);
         throw err;
       }
-      const { mensajes, hayMas } = pagina;
-      responder(ack, { sala, rol: rolEnSala(sala, uid), mensajes, hayMas });
-      await presencia(limpio);
+      await presencia(servidor, limpio);
     } catch (err) {
       responder(ack, dbError(err));
     }
@@ -77,11 +81,7 @@ function conectar(socket: Socket) {
     const limpio = idSala(payload);
     if (!limpio) return responder(ack, error('VALIDATION_ERROR', 'Indica un ID de sala válido.', 'id'));
     try {
-      // Solo actúa sobre salas unidas: nunca sobre user:<uid> ni el room propio del socket.
-      if (salas.delete(limpio)) {
-        await socket.leave(limpio);
-        await presencia(limpio);
-      }
+      await socket.leave(canal(limpio));
       responder(ack, { ok: true });
     } catch (err) {
       responder(ack, dbError(err));
@@ -90,7 +90,7 @@ function conectar(socket: Socket) {
 
   socket.on('mensaje:enviar', async (payload: unknown, ack: unknown) => {
     const { salaId, texto } = objeto(payload);
-    if (typeof salaId !== 'string' || !salas.has(salaId)) {
+    if (typeof salaId !== 'string' || !socket.rooms.has(canal(salaId))) {
       return responder(ack, error('FORBIDDEN', 'Primero únete a la sala.'));
     }
     const limpio = typeof texto === 'string' ? texto.trim() : '';
@@ -98,35 +98,98 @@ function conectar(socket: Socket) {
       return responder(ack, error('VALIDATION_ERROR', `El mensaje debe tener entre 1 y ${MAX_TEXTO} caracteres.`, 'texto'));
     }
     try {
-      if (!(await getSala(salaId))) {
-        salas.delete(salaId);
-        await socket.leave(salaId);
+      const mensaje = await guardarMensaje(salaId, { uid, autor: nombre, texto: limpio });
+      if (!mensaje) {
         return responder(ack, error('NOT_FOUND', 'La sala ya no existe.'));
       }
-      const mensaje = await guardarMensaje(salaId, { uid, autor: nombre, texto: limpio });
-      io?.to(salaId).emit('mensaje:nuevo', mensaje);
+      servidor.to(canal(salaId)).emit('mensaje:nuevo', mensaje);
       responder(ack, { mensaje });
     } catch (err) {
       responder(ack, dbError(err));
     }
   });
-
-  socket.on('disconnecting', () => {
-    for (const sala of salas) void presencia(sala, socket);
-  });
 }
 
 export function iniciarTiempoReal(server: http.Server) {
   // Misma regla que app.ts: sin CORS_ORIGIN no se permite ningún origen.
-  io = new Server(server, { maxHttpBufferSize: 16 * 1024, cors: { origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) ?? false } });
+  const servidor = new Server(server, { maxHttpBufferSize: 16 * 1024, cors: { origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) ?? false } });
+  io = servidor;
+
+  const observaciones = new Map<string, Observacion>();
+  const adapter = servidor.of('/').adapter;
+  adapter.on('leave-room', (grupo: string) => {
+    if (grupo.startsWith(PREFIJO_SALA) && adapter.rooms.get(grupo)?.size) {
+      void presencia(servidor, grupo.slice(PREFIJO_SALA.length));
+    }
+  });
+  adapter.on('delete-room', (grupo: string) => {
+    observaciones.get(grupo)?.cancelar();
+    observaciones.delete(grupo);
+  });
+
+  // La API y el servicio Socket.IO comparten Firestore aunque estén en procesos distintos.
+  function vigilar(sala: Sala): Observacion {
+    const grupo = canal(sala.id);
+    const existente = observaciones.get(grupo);
+    if (existente) return existente;
+    let cancelarWatch: (() => void) | undefined;
+    let reintento: ReturnType<typeof setTimeout> | undefined;
+    let espera = 1000;
+    let generacion = 0;
+    const observacion: Observacion = { sala, cancelar: () => {
+      generacion++;
+      if (reintento) clearTimeout(reintento);
+      cancelarWatch?.();
+    } };
+    observaciones.set(grupo, observacion);
+
+    function observar() {
+      if (observaciones.get(grupo) !== observacion || !adapter.rooms.get(grupo)?.size) return;
+      const turno = ++generacion;
+      const vigente = () => turno === generacion && observaciones.get(grupo) === observacion;
+      const fallo = (err: unknown) => {
+        if (!vigente()) return;
+        generacion++;
+        cancelarWatch?.();
+        cancelarWatch = undefined;
+        console.error('Error observando la sala:', err);
+        reintento = setTimeout(() => {
+          reintento = undefined;
+          observar();
+        }, espera);
+        espera = Math.min(espera * 2, 30000);
+      };
+      try {
+        const cancelar = observarSala(sala.id, (actual) => {
+          if (!vigente()) return;
+          espera = 1000;
+          const anterior = observacion.sala;
+          observacion.sala = actual;
+          if (!actual) {
+            servidor.to(grupo).emit('sala:eliminada', { salaId: sala.id });
+            servidor.in(grupo).socketsLeave(grupo);
+          } else if (actual.nombre !== anterior?.nombre || actual.descripcion !== anterior?.descripcion) {
+            servidor.to(grupo).emit('sala:actualizada', { sala: actual });
+          }
+        }, fallo);
+        // Un callback síncrono pudo cancelar esta suscripción antes de recibir su cierre.
+        if (vigente()) cancelarWatch = cancelar;
+        else cancelar();
+      } catch (err) {
+        fallo(err);
+      }
+    }
+    observar();
+    return observacion;
+  }
 
   // io.use espera un callback síncrono: la promesa se maneja aquí.
-  io.use((socket, next) => {
+  servidor.use((socket, next) => {
     autenticar(socket, next).catch(next);
   });
 
-  io.on('connection', conectar);
-  return io;
+  servidor.on('connection', (socket) => conectar(servidor, socket, vigilar));
+  return servidor;
 }
 
 async function autenticar(socket: Socket, next: (err?: Error) => void) {
@@ -138,7 +201,7 @@ async function autenticar(socket: Socket, next: (err?: Error) => void) {
     const perfil = await getPerfil(uid);
     if (!perfil?.username) return fallo('PROFILE_INCOMPLETE', 'Primero elige tu username.');
     const nombre = `${perfil.nombres} ${perfil.apellidos}`.trim() || perfil.username;
-    socket.data = { uid, username: perfil.username, nombre, foto: perfil.foto ?? null, salas: new Set<string>() } satisfies Datos;
+    socket.data = { uid, username: perfil.username, nombre, foto: perfil.foto ?? null } satisfies Datos;
     await socket.join('user:' + uid);
     next();
   } catch (err) {

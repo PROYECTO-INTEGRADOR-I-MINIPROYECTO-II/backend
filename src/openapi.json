@@ -3,7 +3,7 @@
   "info": {
     "title": "Synk API",
     "version": "0.1.0",
-    "description": "API de Synk (salas de estudio)"
+    "description": "API de Synk (salas de estudio)\n\n### Socket.IO\n\nEl servicio de tiempo real recibe `auth: { token }` con un ID token de Firebase. En una reconexión, el cliente vuelve a emitir `sala:unirse`; la respuesta incluye el historial reciente.\n\n| Evento | Datos | Destino |\n| --- | --- | --- |\n| `sala:unirse` | `{ id }` | Servidor. Ack `{ sala, rol, mensajes, hayMas }` |\n| `sala:salir` | `{ id }` | Servidor. Ack `{ ok: true }` |\n| `mensaje:enviar` | `{ salaId, texto }` | Servidor. Ack `{ mensaje }` tras guardar en Firestore |\n| `mensaje:nuevo` | `{ id, salaId, uid, autor, texto, creado }` | Participantes de la sala, incluido el emisor |\n| `sala:presencia` | `{ salaId, usuarios: [{ uid, username, nombre, foto }] }` | Participantes de la sala |\n| `sala:actualizada` | `{ sala }` | Participantes de la sala editada |\n| `sala:eliminada` | `{ salaId }` | Participantes de la sala, antes de retirarlos de ella |\n\nLos errores de los eventos llegan en el ack como `{ error: { code, message, campo? } }`."
   },
   "paths": {
     "/api/health": {
@@ -892,6 +892,187 @@
             "$ref": "#/components/responses/DbUnavailable"
           }
         }
+      },
+      "patch": {
+        "summary": "Edita el nombre o la descripción de una sala (solo anfitrión)",
+        "tags": [
+          "Salas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,128}$"
+            },
+            "example": "nP8dK1zX4qWm7R2s9aBc"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "required": [
+                      "nombre"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "descripcion"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "descripcion": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sala actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sala"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos de la sala o ID inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "Solo el anfitrión puede editar o eliminar la sala",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La sala no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "La sala no existe. Revisa el ID."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Elimina la sala y su historial (solo anfitrión)",
+        "description": "Los participantes conectados reciben el evento sala:eliminada.",
+        "tags": [
+          "Salas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,128}$"
+            },
+            "example": "nP8dK1zX4qWm7R2s9aBc"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Sala e historial eliminados"
+          },
+          "400": {
+            "description": "Datos de la sala o ID inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "Solo el anfitrión puede editar o eliminar la sala",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La sala no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "La sala no existe. Revisa el ID."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
       }
     },
     "/api/salas/{id}/mensajes": {
@@ -920,24 +1101,35 @@
             "name": "antes",
             "in": "query",
             "required": false,
-            "description": "Fecha ISO: solo mensajes anteriores a ella (use el creado del primer mensaje recibido)",
+            "description": "Fecha ISO del cursor siguiente. Si se usa sola, devuelve mensajes estrictamente anteriores a esta fecha.",
             "schema": {
               "type": "string",
               "format": "date-time"
             },
             "example": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "name": "antesId",
+            "in": "query",
+            "required": false,
+            "description": "ID del cursor siguiente. Envíelo con antes para paginar entre mensajes con la misma fecha.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,128}$"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Hasta 50 mensajes; hayMas es true si puede haber más antiguos",
+            "description": "Hasta 50 mensajes. Use siguiente como parámetros de la próxima página si hayMas es true.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "required": [
                     "mensajes",
-                    "hayMas"
+                    "hayMas",
+                    "siguiente"
                   ],
                   "properties": {
                     "mensajes": {
@@ -948,6 +1140,23 @@
                     },
                     "hayMas": {
                       "type": "boolean"
+                    },
+                    "siguiente": {
+                      "type": "object",
+                      "nullable": true,
+                      "required": [
+                        "antes",
+                        "antesId"
+                      ],
+                      "properties": {
+                        "antes": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "antesId": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 },
@@ -962,13 +1171,14 @@
                       "creado": "2026-01-01T00:00:00.000Z"
                     }
                   ],
-                  "hayMas": false
+                  "hayMas": false,
+                  "siguiente": null
                 }
               }
             }
           },
           "400": {
-            "description": "ID de sala o fecha `antes` inválidos",
+            "description": "ID de sala o parámetros del cursor inválidos",
             "content": {
               "application/json": {
                 "schema": {
@@ -1006,7 +1216,8 @@
           "503": {
             "$ref": "#/components/responses/DbUnavailable"
           }
-        }
+        },
+        "description": "Si el historial inicial llega en el ack de sala:unirse, use el creado e id del primer mensaje como antes y antesId."
       }
     }
   },

@@ -26,8 +26,7 @@ router.get('/salas/:id', async (req, res, next) => {
 
 router.get('/salas/:id/mensajes', async (req, res, next) => {
   try {
-    const antes = req.query.antes;
-    res.json(await svc.obtenerMensajes(String(req.params.id), antes === undefined ? undefined : String(antes)));
+    res.json(await svc.obtenerMensajes(String(req.params.id), req.query.antes, req.query.antesId));
   } catch (err) {
     next(err);
   }
@@ -37,6 +36,25 @@ router.post('/salas', async (req, res, next) => {
   try {
     const { uid } = res.locals as AuthLocals;
     res.status(201).json(await svc.crearSala(uid, req.body));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/salas/:id', async (req, res, next) => {
+  try {
+    const { uid } = res.locals as AuthLocals;
+    res.json(await svc.editarSala(uid, String(req.params.id), req.body));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/salas/:id', async (req, res, next) => {
+  try {
+    const { uid } = res.locals as AuthLocals;
+    await svc.eliminarSala(uid, String(req.params.id));
+    res.status(204).end();
   } catch (err) {
     next(err);
   }

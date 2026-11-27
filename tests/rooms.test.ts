@@ -74,6 +74,30 @@ describe.skipIf(!hayEmulador)('salas (emuladores)', () => {
     expect((await crear({ nombre: 'Estudio', descripcion: 'a'.repeat(501) })).body.error.campo).toBe('descripcion');
   });
 
+  it('solo permite al anfitrión editar y eliminar una sala', async () => {
+    const ana = await crearCuenta('ana@x.com');
+    const bea = await crearCuenta('bea@x.com');
+    const original = (await request(app).post('/api/salas').set(bearer(ana.idToken))
+      .send({ nombre: 'Estudio', descripcion: 'Repaso' }).expect(201)).body;
+    const ruta = `/api/salas/${original.id}`;
+
+    await request(app).patch(ruta).send({ nombre: 'Sin sesión' }).expect(401);
+    await request(app).delete(ruta).expect(401);
+    await request(app).patch(ruta).set(bearer(bea.idToken)).send({ nombre: 'De Bea' }).expect(403);
+    await request(app).delete(ruta).set(bearer(bea.idToken)).expect(403);
+    await request(app).patch(ruta).set(bearer(ana.idToken)).send({ nombre: ' ' }).expect(400);
+
+    const editada = await request(app).patch(ruta).set(bearer(ana.idToken))
+      .send({ nombre: '  Cálculo  ', uid: bea.localId }).expect(200);
+    expect(editada.body).toEqual({ ...original, nombre: 'Cálculo' });
+    expect((await request(app).get(ruta).set(bearer(bea.idToken))).body).toEqual({
+      ...editada.body, rol: 'participante',
+    });
+    await request(app).delete(ruta).set(bearer(ana.idToken)).expect(204);
+    await request(app).patch(ruta).set(bearer(ana.idToken)).send({ nombre: 'Cálculo' }).expect(404);
+    await request(app).get(ruta).set(bearer(bea.idToken)).expect(404);
+  });
+
   it('elimina las salas propias al eliminar la cuenta', async () => {
     const { idToken, localId } = await crearCuenta('ana@x.com');
     await request(app).post('/api/salas').set(bearer(idToken)).send({ nombre: 'Estudio' }).expect(201);
@@ -157,6 +181,28 @@ describe.skipIf(!hayEmulador)('salas (emuladores)', () => {
       const res = (await request(app).get(`/api/salas/${sala}/mensajes`).set(bearer(idToken))).body;
       expect(res.mensajes).toHaveLength(50);
       expect(res.hayMas).toBe(false);
+    });
+
+    it('pagina sin omitir ni duplicar mensajes con la misma fecha', async () => {
+      const { idToken } = await crearCuenta('ana@x.com');
+      const sala = await nuevaSala(idToken);
+      const firestore = getDb();
+      const col = firestore.collection('rooms').doc(sala).collection('messages');
+      const batch = firestore.batch();
+      const creado = '2026-01-01T00:00:00.000Z';
+      for (let i = 0; i < 51; i++) {
+        const id = `m${String(i).padStart(2, '0')}`;
+        batch.create(col.doc(id), { uid: 'u', autor: 'Ana', texto: id, creado });
+      }
+      await batch.commit();
+
+      const url = `/api/salas/${sala}/mensajes`;
+      const pagina = (await request(app).get(url).set(bearer(idToken)).expect(200)).body;
+      expect(pagina.mensajes).toHaveLength(50);
+      expect(pagina.siguiente).toEqual({ antes: creado, antesId: 'm01' });
+      const resto = (await request(app).get(url).set(bearer(idToken)).query(pagina.siguiente).expect(200)).body;
+      expect(resto.mensajes.map((m: { id: string }) => m.id)).toEqual(['m00']);
+      expect(resto.siguiente).toBeNull();
     });
 
     it('antes sin milisegundos equivale al ISO canónico', async () => {

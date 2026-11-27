@@ -4,7 +4,9 @@ import * as svc from '../src/services/rooms.service';
 
 vi.mock('../src/repositories/rooms.repository', () => ({
   crearSala: vi.fn(),
+  editarSala: vi.fn(),
   listarSalas: vi.fn(),
+  listarMensajes: vi.fn(),
   borrarSalasDePropietario: vi.fn(),
 }));
 
@@ -43,6 +45,18 @@ describe('servicio de salas', () => {
     expect(crearSalaRepo).not.toHaveBeenCalled();
   });
 
+  it('devuelve un cursor de fecha e ID para la página anterior', async () => {
+    const creado = '2026-01-01T00:00:00.000Z';
+    const mensajes = Array.from({ length: 51 }, (_, i) => ({
+      id: `msg${i}`, salaId: 'sala1', creado, uid: 'u1', autor: 'Ana', texto: 'Hola',
+    }));
+    vi.mocked(repo.listarMensajes).mockResolvedValue(mensajes);
+    expect(await svc.historial('sala1', creado, 'msg51')).toEqual({
+      mensajes: mensajes.slice(1), hayMas: true, siguiente: { antes: creado, antesId: 'msg1' },
+    });
+    expect(repo.listarMensajes).toHaveBeenCalledWith('sala1', 51, creado, 'msg51');
+  });
+
   it('convierte errores de Firestore en DB_UNAVAILABLE', async () => {
     crearSalaRepo.mockRejectedValue(new Error('Firestore unavailable'));
 
@@ -52,4 +66,13 @@ describe('servicio de salas', () => {
     });
     expect(console.error).toHaveBeenCalledWith('Error en Firestore:', expect.any(Error));
   });
+
+  it('valida los cambios de sala y deja fuera los campos de propiedad', async () => {
+    await expect(svc.editarSala('anfitrion', 'sala1', { uid: 'participante' })).rejects.toMatchObject({ status: 400 });
+    expect(repo.editarSala).not.toHaveBeenCalled();
+
+    await svc.editarSala('anfitrion', 'sala1', { descripcion: '  Repaso  ', uid: 'participante' });
+    expect(repo.editarSala).toHaveBeenCalledWith('sala1', 'anfitrion', { descripcion: 'Repaso' });
+  });
+
 });

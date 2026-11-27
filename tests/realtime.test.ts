@@ -112,14 +112,27 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
     expect((await rooms[0].collection('messages').get()).empty).toBe(true);
   });
 
-  it('si la sala se borró, el envío da NOT_FOUND y no escribe', async () => {
+  it('avisa a los participantes cuando el anfitrión edita o borra la sala', async () => {
     const ana = await usuario('ana@x.com', 'ana');
+    const bea = await usuario('bea@x.com', 'bea');
     const sala = await crearSala(ana.idToken);
+    const otra = await crearSala(bea.idToken);
     await emitir(ana.socket, 'sala:unirse', { id: sala });
-    await getDb().recursiveDelete(getDb().collection('rooms').doc(sala));
-    expect((await emitir(ana.socket, 'mensaje:enviar', { salaId: sala, texto: 'hola' })).error.code).toBe('NOT_FOUND');
+    await emitir(bea.socket, 'sala:unirse', { id: sala });
+    await emitir(ana.socket, 'sala:unirse', { id: otra });
+    await emitir(bea.socket, 'mensaje:enviar', { salaId: sala, texto: 'hola' });
+
+    const actualizada = siguiente(bea.socket, 'sala:actualizada');
+    await request(app).patch(`/api/salas/${sala}`).set(bearer(ana.idToken)).send({ nombre: 'Nuevo nombre' }).expect(200);
+    expect(await actualizada).toMatchObject({ sala: { id: sala, nombre: 'Nuevo nombre' } });
+
+    const eliminada = siguiente(bea.socket, 'sala:eliminada');
+    await request(app).delete(`/api/salas/${sala}`).set(bearer(ana.idToken)).expect(204);
+    expect(await eliminada).toEqual({ salaId: sala });
+    expect((await emitir(bea.socket, 'mensaje:enviar', { salaId: sala, texto: 'hola' })).error.code).toBe('FORBIDDEN');
     expect((await getDb().collection('rooms').doc(sala).collection('messages').get()).empty).toBe(true);
-    expect((await emitir(ana.socket, 'mensaje:enviar', { salaId: sala, texto: 'hola' })).error.code).toBe('FORBIDDEN');
+    expect((await emitir(ana.socket, 'mensaje:enviar', { salaId: otra, texto: 'hola' })).mensaje.salaId).toBe(otra);
+    expect((await emitir(bea.socket, 'sala:unirse', { id: sala })).error.code).toBe('NOT_FOUND');
   });
 
   it('rechaza IDs con caracteres no válidos', async () => {
@@ -156,6 +169,24 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
     const ack = await emitir(bea.socket, 'sala:unirse', { id: sala });
     expect(ack.mensajes).toEqual([mensaje]);
     expect(ack.hayMas).toBe(false);
+  });
+
+  it('al reconectar recupera el chat de su sala y vuelve a recibir en vivo', async () => {
+    const ana = await usuario('ana@x.com', 'ana');
+    const bea = await usuario('bea@x.com', 'bea');
+    const sala = await crearSala(ana.idToken);
+    await emitir(ana.socket, 'sala:unirse', { id: sala });
+    await emitir(bea.socket, 'sala:unirse', { id: sala });
+    bea.socket.disconnect();
+
+    const ausente = await emitir(ana.socket, 'mensaje:enviar', { salaId: sala, texto: 'Mientras no estabas' });
+    await conectado(bea.socket.connect());
+    const ack = await emitir(bea.socket, 'sala:unirse', { id: sala });
+    expect(ack.mensajes).toEqual([ausente.mensaje]);
+
+    const recibido = siguiente(bea.socket, 'mensaje:nuevo');
+    const presente = await emitir(ana.socket, 'mensaje:enviar', { salaId: sala, texto: 'Ya volviste' });
+    expect(await recibido).toEqual(presente.mensaje);
   });
 
   it('emite la presencia al unirse y al salir', async () => {
