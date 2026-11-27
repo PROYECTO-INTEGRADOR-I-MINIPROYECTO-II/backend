@@ -171,6 +171,24 @@ describe.skipIf(!hayEmulador)('tiempo real (emuladores)', () => {
     expect(ack.hayMas).toBe(false);
   });
 
+  it('al reconectar recupera el chat de su sala y vuelve a recibir en vivo', async () => {
+    const ana = await usuario('ana@x.com', 'ana');
+    const bea = await usuario('bea@x.com', 'bea');
+    const sala = await crearSala(ana.idToken);
+    await emitir(ana.socket, 'sala:unirse', { id: sala });
+    await emitir(bea.socket, 'sala:unirse', { id: sala });
+    bea.socket.disconnect();
+
+    const ausente = await emitir(ana.socket, 'mensaje:enviar', { salaId: sala, texto: 'Mientras no estabas' });
+    await conectado(bea.socket.connect());
+    const ack = await emitir(bea.socket, 'sala:unirse', { id: sala });
+    expect(ack.mensajes).toEqual([ausente.mensaje]);
+
+    const recibido = siguiente(bea.socket, 'mensaje:nuevo');
+    const presente = await emitir(ana.socket, 'mensaje:enviar', { salaId: sala, texto: 'Ya volviste' });
+    expect(await recibido).toEqual(presente.mensaje);
+  });
+
   it('emite la presencia al unirse y al salir', async () => {
     const ana = await usuario('ana@x.com', 'ana');
     const bea = await usuario('bea@x.com', 'bea');
