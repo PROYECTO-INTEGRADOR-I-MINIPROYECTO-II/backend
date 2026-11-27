@@ -25,6 +25,8 @@ Documentación Swagger: `/api/docs`.
 | POST | `/api/salas` | Crea una sala privada `{ nombre, descripcion? }` (`201`); el servidor asigna el ID y propietario |
 | GET | `/api/salas` | Lista las salas privadas creadas por la sesión (`{ salas }`) |
 | GET | `/api/salas/:id` | Consulta una sala por ID con el rol de la sesión (`rol`: `anfitrion` o `participante`); `404` si no existe |
+| PATCH | `/api/salas/:id` | Edita `{ nombre?, descripcion? }` y devuelve la sala actualizada (`200`). Solo el anfitrión (`403` para los demás) |
+| DELETE | `/api/salas/:id` | Elimina la sala y su historial (`204`). Solo el anfitrión (`403` para los demás) |
 | GET | `/api/salas/:id/mensajes?antes=` | Historial por partes de 50, de antiguo a reciente (`{ mensajes, hayMas }`); `antes` es una fecha ISO (el `creado` del primer mensaje recibido) |
 
 Las rutas `/api/usuarios/**` exigen `Authorization: Bearer <ID token de Firebase>`; sin token, inválido, vencido o revocado: `401 UNAUTHENTICATED`. El login lo hace Firebase en el cliente; `GET /api/usuarios/yo` sirve para comprobar la sesión.
@@ -43,12 +45,12 @@ Política al eliminar la cuenta (sin datos huérfanos):
 
 El orden es revocar sesiones y cortar sockets → borrar salas → anonimizar → borrar perfil → borrar Auth; cada paso es idempotente, así que si falla a mitad basta reintentar. La anonimización consulta `messages` como collection group por `uid`, lo que requiere el índice de `firestore.indexes.json`.
 
-## Tiempo real (Socket.io)
+## Tiempo real (Socket.IO)
 
 Servicio aparte de la API (ver más abajo), con su propio puerto. El cliente se conecta con su ID token de Firebase:
 
 ```js
-const socket = io(API_URL, { auth: { token } });
+const socket = io(REALTIME_URL, { auth: { token } });
 ```
 
 Si el token falta o es inválido, o el usuario aún no tiene username, el handshake falla: `connect_error` con `err.data = { code, message }` (`UNAUTHENTICATED`, `PROFILE_INCOMPLETE`, `AUTH_UNAVAILABLE`). Los handlers responden por ack `{ ... }` o `{ error: { code, message, campo? } }`.
@@ -60,6 +62,8 @@ Si el token falta o es inválido, o el usuario aún no tiene username, el handsh
 | cliente → servidor | `mensaje:enviar` | `{ salaId, texto }` (1-1000 caracteres, recortado) | ack `{ mensaje }`; `FORBIDDEN` (no unido), `VALIDATION_ERROR` (campo `texto`), `DB_UNAVAILABLE` |
 | servidor → cliente | `mensaje:nuevo` | `{ id, salaId, uid, autor, texto, creado }` | a toda la sala (incluye al emisor) |
 | servidor → cliente | `sala:presencia` | `{ salaId, usuarios: [{ uid, username, nombre, foto }] }` | al unirse, salir o desconectarse alguien |
+| servidor → cliente | `sala:actualizada` | `{ sala }` | a los participantes de la sala editada, incluido el anfitrión si está conectado |
+| servidor → cliente | `sala:eliminada` | `{ salaId }` | a los participantes de la sala eliminada, antes de retirarlos de ella |
 
 Los mensajes se guardan en `rooms/{salaId}/messages`.
 

@@ -3,7 +3,7 @@
   "info": {
     "title": "Synk API",
     "version": "0.1.0",
-    "description": "API de Synk (salas de estudio)"
+    "description": "API de Synk (salas de estudio)\n\n### Socket.IO\n\nEl servicio de tiempo real recibe `auth: { token }` con un ID token de Firebase. En una reconexión, el cliente vuelve a emitir `sala:unirse`; la respuesta incluye el historial reciente.\n\n| Evento | Datos | Destino |\n| --- | --- | --- |\n| `sala:unirse` | `{ id }` | Servidor. Ack `{ sala, rol, mensajes, hayMas }` |\n| `sala:salir` | `{ id }` | Servidor. Ack `{ ok: true }` |\n| `mensaje:enviar` | `{ salaId, texto }` | Servidor. Ack `{ mensaje }` tras guardar en Firestore |\n| `mensaje:nuevo` | `{ id, salaId, uid, autor, texto, creado }` | Participantes de la sala, incluido el emisor |\n| `sala:presencia` | `{ salaId, usuarios: [{ uid, username, nombre, foto }] }` | Participantes de la sala |\n| `sala:actualizada` | `{ sala }` | Participantes de la sala editada |\n| `sala:eliminada` | `{ salaId }` | Participantes de la sala, antes de retirarlos de ella |\n\nLos errores de los eventos llegan en el ack como `{ error: { code, message, campo? } }`."
   },
   "paths": {
     "/api/health": {
@@ -871,6 +871,187 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "La sala no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "La sala no existe. Revisa el ID."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Edita el nombre o la descripción de una sala (solo anfitrión)",
+        "tags": [
+          "Salas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,128}$"
+            },
+            "example": "nP8dK1zX4qWm7R2s9aBc"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "required": [
+                      "nombre"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "descripcion"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "descripcion": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sala actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sala"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos de la sala o ID inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "Solo el anfitrión puede editar o eliminar la sala",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La sala no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "La sala no existe. Revisa el ID."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/DbUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Elimina la sala y su historial (solo anfitrión)",
+        "description": "Los participantes conectados reciben el evento sala:eliminada.",
+        "tags": [
+          "Salas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,128}$"
+            },
+            "example": "nP8dK1zX4qWm7R2s9aBc"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Sala e historial eliminados"
+          },
+          "400": {
+            "description": "Datos de la sala o ID inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "Solo el anfitrión puede editar o eliminar la sala",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "404": {
             "description": "La sala no existe",

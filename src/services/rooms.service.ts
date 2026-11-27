@@ -18,33 +18,37 @@ async function db<T>(op: Promise<T>): Promise<T> {
   }
 }
 
-function validarNuevaSala(body: unknown): NuevaSala {
+function validarDatosSala(body: unknown, parcial = false): Partial<NuevaSala> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     throw invalido('nombre', 'Envía los datos de la sala.');
   }
 
   const entrada = body as Record<string, unknown>;
-  if (typeof entrada.nombre !== 'string' || !entrada.nombre.trim()) {
-    throw invalido('nombre', 'Escribe el nombre de la sala.');
-  }
-  const nombre = entrada.nombre.trim();
-  if ([...nombre].length > SALA_NOMBRE_MAX) {
-    throw invalido('nombre', `El nombre de la sala no puede superar ${SALA_NOMBRE_MAX} caracteres.`);
-  }
-
-  if (entrada.descripcion !== undefined && typeof entrada.descripcion !== 'string') {
-    throw invalido('descripcion', 'La descripción debe ser texto.');
-  }
-  const descripcion = typeof entrada.descripcion === 'string' ? entrada.descripcion.trim() : '';
-  if ([...descripcion].length > SALA_DESCRIPCION_MAX) {
-    throw invalido('descripcion', `La descripción no puede superar ${SALA_DESCRIPCION_MAX} caracteres.`);
+  const datos: Partial<NuevaSala> = {};
+  if (!parcial || entrada.nombre !== undefined) {
+    if (typeof entrada.nombre !== 'string' || !entrada.nombre.trim()) {
+      throw invalido('nombre', 'Escribe el nombre de la sala.');
+    }
+    datos.nombre = entrada.nombre.trim();
+    if ([...datos.nombre].length > SALA_NOMBRE_MAX) {
+      throw invalido('nombre', `El nombre de la sala no puede superar ${SALA_NOMBRE_MAX} caracteres.`);
+    }
   }
 
-  return { nombre, descripcion };
+  if (entrada.descripcion !== undefined) {
+    if (typeof entrada.descripcion !== 'string') throw invalido('descripcion', 'La descripción debe ser texto.');
+    datos.descripcion = entrada.descripcion.trim();
+    if ([...datos.descripcion].length > SALA_DESCRIPCION_MAX) {
+      throw invalido('descripcion', `La descripción no puede superar ${SALA_DESCRIPCION_MAX} caracteres.`);
+    }
+  }
+
+  return datos;
 }
 
 export async function crearSala(uid: string, body: unknown) {
-  return db(repo.crearSala(uid, validarNuevaSala(body)));
+  const { nombre, descripcion = '' } = validarDatosSala(body);
+  return db(repo.crearSala(uid, { nombre: nombre!, descripcion }));
 }
 
 export async function listarSalas(uid: string) {
@@ -53,11 +57,27 @@ export async function listarSalas(uid: string) {
 
 export const rolEnSala = (sala: { uid: string }, uid: string) => (sala.uid === uid ? 'anfitrion' : 'participante');
 
-export async function obtenerSala(uid: string, id: string) {
+function validarId(id: string) {
   if (!ID_SALA.test(id)) throw invalido('id', 'Indica un ID de sala válido.');
+}
+
+export async function obtenerSala(uid: string, id: string) {
+  validarId(id);
   const sala = await db(repo.getSala(id));
   if (!sala) throw new AppError(404, 'NOT_FOUND', 'La sala no existe. Revisa el ID.');
   return { ...sala, rol: rolEnSala(sala, uid) };
+}
+
+export async function editarSala(uid: string, id: string, body: unknown) {
+  validarId(id);
+  const cambios = validarDatosSala(body, true);
+  if (!Object.keys(cambios).length) throw invalido('nombre', 'Envía un nombre o una descripción para actualizar.');
+  return db(repo.editarSala(id, uid, cambios));
+}
+
+export async function eliminarSala(uid: string, id: string) {
+  validarId(id);
+  await db(repo.eliminarSala(id, uid));
 }
 
 const PAGINA_MENSAJES = 50;

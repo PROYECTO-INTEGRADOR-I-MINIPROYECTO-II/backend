@@ -4,6 +4,7 @@ import * as svc from '../src/services/rooms.service';
 
 vi.mock('../src/repositories/rooms.repository', () => ({
   crearSala: vi.fn(),
+  editarSala: vi.fn(),
   listarSalas: vi.fn(),
   borrarSalasDePropietario: vi.fn(),
 }));
@@ -52,4 +53,13 @@ describe('servicio de salas', () => {
     });
     expect(console.error).toHaveBeenCalledWith('Error en Firestore:', expect.any(Error));
   });
+
+  it('valida los cambios de sala y deja fuera los campos de propiedad', async () => {
+    await expect(svc.editarSala('anfitrion', 'sala1', { uid: 'participante' })).rejects.toMatchObject({ status: 400 });
+    expect(repo.editarSala).not.toHaveBeenCalled();
+
+    await svc.editarSala('anfitrion', 'sala1', { descripcion: '  Repaso  ', uid: 'participante' });
+    expect(repo.editarSala).toHaveBeenCalledWith('sala1', 'anfitrion', { descripcion: 'Repaso' });
+  });
+
 });

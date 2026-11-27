@@ -42,4 +42,23 @@ router.post('/salas', async (req, res, next) => {
   }
 });
 
+router.patch('/salas/:id', async (req, res, next) => {
+  try {
+    const { uid } = res.locals as AuthLocals;
+    res.json(await svc.editarSala(uid, String(req.params.id), req.body));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/salas/:id', async (req, res, next) => {
+  try {
+    const { uid } = res.locals as AuthLocals;
+    await svc.eliminarSala(uid, String(req.params.id));
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
